@@ -2,7 +2,7 @@ import type { Model } from "@mariozechner/pi-ai";
 import { Store } from "../store.js";
 import type { StoreConfig } from "../types.js";
 
-export type AutoDiscoveryProviderType = "ollama" | "llama.cpp" | "vllm" | "lmstudio";
+export type AutoDiscoveryProviderType = "ollama" | "llama.cpp" | "vllm" | "lmstudio" | "omlx";
 
 export type CustomProviderType =
 	| AutoDiscoveryProviderType // Auto-discovery - models fetched on-demand

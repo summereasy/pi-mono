@@ -149,7 +149,8 @@ export class ModelSelector extends DialogBase {
 					provider.type === "ollama" ||
 					provider.type === "llama.cpp" ||
 					provider.type === "vllm" ||
-					provider.type === "lmstudio";
+					provider.type === "lmstudio" ||
+					provider.type === "omlx";
 
 				if (isAutoDiscovery) {
 					try {

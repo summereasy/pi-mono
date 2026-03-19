@@ -69,6 +69,7 @@ export class CustomProviderDialog extends DialogBase {
 			"llama.cpp": "http://localhost:8080",
 			vllm: "http://localhost:8000",
 			lmstudio: "http://localhost:1234",
+			omlx: "http://localhost:8000",
 			"openai-completions": "",
 			"openai-responses": "",
 			"anthropic-messages": "",
@@ -78,7 +79,13 @@ export class CustomProviderDialog extends DialogBase {
 	}
 
 	private isAutoDiscoveryType(): boolean {
-		return this.type === "ollama" || this.type === "llama.cpp" || this.type === "vllm" || this.type === "lmstudio";
+		return (
+			this.type === "ollama" ||
+			this.type === "llama.cpp" ||
+			this.type === "vllm" ||
+			this.type === "lmstudio" ||
+			this.type === "omlx"
+		);
 	}
 
 	private async testConnection() {
@@ -90,7 +97,7 @@ export class CustomProviderDialog extends DialogBase {
 
 		try {
 			const models = await discoverModels(
-				this.type as "ollama" | "llama.cpp" | "vllm" | "lmstudio",
+				this.type as "ollama" | "llama.cpp" | "vllm" | "lmstudio" | "omlx",
 				this.baseUrl,
 				this.apiKey || undefined,
 			);
@@ -125,7 +132,8 @@ export class CustomProviderDialog extends DialogBase {
 				type: this.type,
 				baseUrl: this.baseUrl,
 				apiKey: this.apiKey || undefined,
-				models: this.isAutoDiscoveryType() ? undefined : this.provider?.models || [],
+				// Always save discovered models, even for auto-discovery types
+				models: this.discoveredModels.length > 0 ? this.discoveredModels : this.provider?.models || [],
 			};
 
 			await storage.customProviders.set(provider);
@@ -146,6 +154,7 @@ export class CustomProviderDialog extends DialogBase {
 			{ value: "llama.cpp", label: "llama.cpp (auto-discovery)" },
 			{ value: "vllm", label: "vLLM (auto-discovery)" },
 			{ value: "lmstudio", label: "LM Studio (auto-discovery)" },
+			{ value: "omlx", label: "omlx (auto-discovery)" },
 			{ value: "openai-completions", label: "OpenAI Completions Compatible" },
 			{ value: "openai-responses", label: "OpenAI Responses Compatible" },
 			{ value: "anthropic-messages", label: "Anthropic Messages Compatible" },

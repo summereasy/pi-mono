@@ -260,7 +260,7 @@ export async function discoverLMStudioModels(baseUrl: string, _apiKey?: string):
  * @returns Array of discovered models
  */
 export async function discoverModels(
-	type: "ollama" | "llama.cpp" | "vllm" | "lmstudio",
+	type: "ollama" | "llama.cpp" | "vllm" | "lmstudio" | "omlx",
 	baseUrl: string,
 	apiKey?: string,
 ): Promise<Model<any>[]> {
@@ -273,5 +273,83 @@ export async function discoverModels(
 			return discoverVLLMModels(baseUrl, apiKey);
 		case "lmstudio":
 			return discoverLMStudioModels(baseUrl, apiKey);
+		case "omlx":
+			return discoverOmlxModels(baseUrl, apiKey);
+	}
+}
+
+/**
+ * Discover models from an omlx server (OpenAI-compatible API).
+ * @param baseUrl - Base URL of the omlx server (e.g., "http://localhost:12345")
+ * @param apiKey - Optional API key (e.g., "omlx")
+ * @returns Array of discovered models
+ */
+export async function discoverOmlxModels(baseUrl: string, apiKey?: string): Promise<Model<any>[]> {
+	try {
+		const headers: HeadersInit = {
+			"Content-Type": "application/json",
+		};
+
+		if (apiKey) {
+			headers.Authorization = `Bearer ${apiKey}`;
+		}
+
+		const response = await fetch(`${baseUrl}/v1/models`, {
+			method: "GET",
+			headers,
+		});
+
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+
+		if (!data.data || !Array.isArray(data.data)) {
+			throw new Error("Invalid response format from omlx server");
+		}
+
+		return data.data.map((model: any) => {
+			// Try to infer capabilities from model name
+			const modelName = model.id.toLowerCase();
+			let reasoning = false;
+			let input: ("text" | "image")[] = ["text"];
+
+			// Check for vision capabilities
+			if (modelName.includes("vl") || modelName.includes("vision") || modelName.includes("ocr")) {
+				input = ["text", "image"];
+			}
+
+			// Check for reasoning capabilities (instruct/chat models)
+			if (modelName.includes("instruct") || modelName.includes("chat")) {
+				reasoning = true;
+			}
+
+			const contextWindow = 32768;
+			const maxTokens = 4096;
+
+			const omxModel: Model<any> = {
+				id: model.id,
+				name: model.id,
+				api: "openai-completions" as any,
+				provider: "", // Will be set by caller
+				baseUrl: `${baseUrl}/v1`,
+				reasoning: reasoning,
+				input: input,
+				cost: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+				},
+				contextWindow: contextWindow,
+				maxTokens: maxTokens,
+			};
+
+			return omxModel;
+		});
+	} catch (err) {
+		console.error("Failed to discover omlx models:", err);
+		throw new Error(`omlx discovery failed: ${err instanceof Error ? err.message : String(err)}`);
 	}
 }

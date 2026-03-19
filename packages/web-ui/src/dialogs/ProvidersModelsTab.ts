@@ -39,7 +39,8 @@ export class ProvidersModelsTab extends SettingsTab {
 					provider.type === "ollama" ||
 					provider.type === "llama.cpp" ||
 					provider.type === "vllm" ||
-					provider.type === "lmstudio";
+					provider.type === "lmstudio" ||
+					provider.type === "omlx";
 				if (isAutoDiscovery) {
 					this.checkProviderStatus(provider);
 				}
@@ -91,7 +92,7 @@ export class ProvidersModelsTab extends SettingsTab {
 
 	private renderCustomProviders(): TemplateResult {
 		const isAutoDiscovery = (type: string) =>
-			type === "ollama" || type === "llama.cpp" || type === "vllm" || type === "lmstudio";
+			type === "ollama" || type === "llama.cpp" || type === "vllm" || type === "lmstudio" || type === "omlx";
 
 		return html`
 			<div class="flex flex-col gap-6">
@@ -109,6 +110,7 @@ export class ProvidersModelsTab extends SettingsTab {
 							{ value: "llama.cpp", label: "llama.cpp" },
 							{ value: "vllm", label: "vLLM" },
 							{ value: "lmstudio", label: "LM Studio" },
+							{ value: "omlx", label: "omlx" },
 							{ value: "openai-completions", label: i18n("OpenAI Completions Compatible") },
 							{ value: "openai-responses", label: i18n("OpenAI Responses Compatible") },
 							{ value: "anthropic-messages", label: i18n("Anthropic Messages Compatible") },
