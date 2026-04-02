@@ -5,6 +5,7 @@
  * createAgentSession() options. The SDK does the heavy lifting.
  */
 
+import { resolve } from "node:path";
 import { type ImageContent, modelsAreEqual, supportsXhigh } from "@mariozechner/pi-ai";
 import chalk from "chalk";
 import { createInterface } from "readline";
@@ -15,6 +16,11 @@ import { buildInitialMessage } from "./cli/initial-message.js";
 import { listModels } from "./cli/list-models.js";
 import { selectSession } from "./cli/session-picker.js";
 import { APP_NAME, getAgentDir, getModelsPath, VERSION } from "./config.js";
+import {
+	type AgentSessionRuntimeBootstrap,
+	AgentSessionRuntimeHost,
+	createAgentSessionRuntime,
+} from "./core/agent-session-runtime.js";
 import { AuthStorage } from "./core/auth-storage.js";
 import { exportFromFile } from "./core/export-html/index.js";
 import type { LoadExtensionsResult } from "./core/extensions/index.js";
@@ -24,10 +30,10 @@ import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/mod
 import { restoreStdout, takeOverStdout } from "./core/output-guard.js";
 import { DefaultPackageManager } from "./core/package-manager.js";
 import { DefaultResourceLoader } from "./core/resource-loader.js";
-import { type CreateAgentSessionOptions, createAgentSession } from "./core/sdk.js";
+import type { CreateAgentSessionOptions } from "./core/sdk.js";
 import { SessionManager } from "./core/session-manager.js";
 import { SettingsManager } from "./core/settings-manager.js";
-import { printTimings, time } from "./core/timings.js";
+import { printTimings, resetTimings, time } from "./core/timings.js";
 import { allTools } from "./core/tools/index.js";
 import { runMigrations, showDeprecationWarnings } from "./migrations.js";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.js";
@@ -439,16 +445,15 @@ async function createSessionManager(
 	parsed: Args,
 	cwd: string,
 	extensions: LoadExtensionsResult,
+	settingsManager: SettingsManager,
 ): Promise<SessionManager | undefined> {
 	if (parsed.noSession) {
 		return SessionManager.inMemory();
 	}
 
-	// CLI flag takes precedence, otherwise ask extensions for custom session directory
-	let effectiveSessionDir = parsed.sessionDir;
-	if (!effectiveSessionDir) {
-		effectiveSessionDir = await callSessionDirectoryHook(extensions, cwd);
-	}
+	// Priority: CLI flag > settings.json > extension hook
+	const effectiveSessionDir =
+		parsed.sessionDir ?? settingsManager.getSessionDir() ?? (await callSessionDirectoryHook(extensions, cwd));
 
 	if (parsed.fork) {
 		const resolved = await resolveSessionPath(parsed.fork, cwd, effectiveSessionDir);
@@ -598,6 +603,40 @@ function buildSessionOptions(
 	return { options, cliThinkingFromModel };
 }
 
+function resolveCliPaths(cwd: string, paths: string[] | undefined): string[] | undefined {
+	return paths?.map((value) => resolve(cwd, value));
+}
+
+function buildRuntimeBootstrap(
+	parsed: Args,
+	cwd: string,
+	agentDir: string,
+	authStorage: AuthStorage,
+	sessionOptions: CreateAgentSessionOptions,
+): AgentSessionRuntimeBootstrap {
+	return {
+		agentDir,
+		authStorage,
+		model: sessionOptions.model,
+		thinkingLevel: sessionOptions.thinkingLevel,
+		scopedModels: sessionOptions.scopedModels,
+		tools: sessionOptions.tools,
+		customTools: sessionOptions.customTools,
+		resourceLoader: {
+			additionalExtensionPaths: resolveCliPaths(cwd, parsed.extensions),
+			additionalSkillPaths: resolveCliPaths(cwd, parsed.skills),
+			additionalPromptTemplatePaths: resolveCliPaths(cwd, parsed.promptTemplates),
+			additionalThemePaths: resolveCliPaths(cwd, parsed.themes),
+			noExtensions: parsed.noExtensions,
+			noSkills: parsed.noSkills,
+			noPromptTemplates: parsed.noPromptTemplates,
+			noThemes: parsed.noThemes,
+			systemPrompt: parsed.systemPrompt,
+			appendSystemPrompt: parsed.appendSystemPrompt,
+		},
+	};
+}
+
 async function handleConfigCommand(args: string[]): Promise<boolean> {
 	if (args[0] !== "config") {
 		return false;
@@ -622,6 +661,7 @@ async function handleConfigCommand(args: string[]): Promise<boolean> {
 }
 
 export async function main(args: string[]) {
+	resetTimings();
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
 		process.env.PI_OFFLINE = "1";
@@ -638,6 +678,7 @@ export async function main(args: string[]) {
 
 	// First pass: parse args to get --extension paths
 	const firstPass = parseArgs(args);
+	time("parseArgs.firstPass");
 	const shouldTakeOverStdout = firstPass.mode !== undefined || firstPass.print || !process.stdin.isTTY;
 	if (shouldTakeOverStdout) {
 		takeOverStdout();
@@ -645,6 +686,7 @@ export async function main(args: string[]) {
 
 	// Run migrations (pass cwd for project-local migrations)
 	const { migratedAuthProviders: migratedProviders, deprecationWarnings } = runMigrations(process.cwd());
+	time("runMigrations");
 
 	// Early load extensions to discover their CLI flags
 	const cwd = process.cwd();
@@ -652,7 +694,7 @@ export async function main(args: string[]) {
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	reportSettingsErrors(settingsManager, "startup");
 	const authStorage = AuthStorage.create();
-	const modelRegistry = new ModelRegistry(authStorage, getModelsPath());
+	const modelRegistry = ModelRegistry.create(authStorage, getModelsPath());
 
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
@@ -669,6 +711,7 @@ export async function main(args: string[]) {
 		systemPrompt: firstPass.systemPrompt,
 		appendSystemPrompt: firstPass.appendSystemPrompt,
 	});
+	time("createResourceLoader");
 	await resourceLoader.reload();
 	time("resourceLoader.reload");
 
@@ -698,6 +741,7 @@ export async function main(args: string[]) {
 
 	// Second pass: parse args with extension flags
 	const parsed = parseArgs(args, extensionFlags);
+	time("parseArgs.secondPass");
 
 	// Pass flag values to extensions via runtime
 	for (const [name, value] of parsed.unknownFlags) {
@@ -729,6 +773,7 @@ export async function main(args: string[]) {
 			parsed.print = true;
 		}
 	}
+	time("readPipedStdin");
 
 	if (parsed.export) {
 		let result: string;
@@ -745,6 +790,7 @@ export async function main(args: string[]) {
 	}
 
 	migrateKeybindingsConfigFile(agentDir);
+	time("migrateKeybindingsConfigFile");
 
 	if (parsed.mode === "rpc" && parsed.fileArgs.length > 0) {
 		console.error(chalk.red("Error: @file arguments are not supported in RPC mode"));
@@ -758,6 +804,7 @@ export async function main(args: string[]) {
 		settingsManager.getImageAutoResize(),
 		stdinContent,
 	);
+	time("prepareInitialMessage");
 	const isInteractive = !parsed.print && parsed.mode === undefined;
 	const startupBenchmark = isTruthyEnvFlag(process.env.PI_STARTUP_BENCHMARK);
 	if (startupBenchmark && !isInteractive) {
@@ -766,6 +813,7 @@ export async function main(args: string[]) {
 	}
 	const mode = parsed.mode || "text";
 	initTheme(settingsManager.getTheme(), isInteractive);
+	time("initTheme");
 
 	// Show deprecation warnings in interactive mode
 	if (isInteractive && deprecationWarnings.length > 0) {
@@ -777,14 +825,19 @@ export async function main(args: string[]) {
 	if (modelPatterns && modelPatterns.length > 0) {
 		scopedModels = await resolveModelScope(modelPatterns, modelRegistry);
 	}
+	time("resolveModelScope");
 
 	// Create session manager based on CLI flags
-	let sessionManager = await createSessionManager(parsed, cwd, extensionsResult);
+	let sessionManager = await createSessionManager(parsed, cwd, extensionsResult, settingsManager);
+	time("createSessionManager");
 
 	// Handle --resume: show session picker
 	if (parsed.resume) {
 		// Compute effective session dir for resume (same logic as createSessionManager)
-		const effectiveSessionDir = parsed.sessionDir || (await callSessionDirectoryHook(extensionsResult, cwd));
+		const effectiveSessionDir =
+			parsed.sessionDir ??
+			settingsManager.getSessionDir() ??
+			(await callSessionDirectoryHook(extensionsResult, cwd));
 
 		const selectedPath = await selectSession(
 			(onProgress) => SessionManager.list(cwd, effectiveSessionDir, onProgress),
@@ -805,11 +858,7 @@ export async function main(args: string[]) {
 		modelRegistry,
 		settingsManager,
 	);
-	sessionOptions.authStorage = authStorage;
-	sessionOptions.modelRegistry = modelRegistry;
-	sessionOptions.resourceLoader = resourceLoader;
 
-	// Handle CLI --api-key as runtime override (not persisted)
 	if (parsed.apiKey) {
 		if (!sessionOptions.model) {
 			console.error(
@@ -820,7 +869,18 @@ export async function main(args: string[]) {
 		authStorage.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);
 	}
 
-	const { session, modelFallbackMessage } = await createAgentSession(sessionOptions);
+	const runtimeBootstrap = buildRuntimeBootstrap(parsed, cwd, agentDir, authStorage, sessionOptions);
+	const runtime = await createAgentSessionRuntime(runtimeBootstrap, {
+		cwd: sessionManager?.getCwd() ?? cwd,
+		sessionManager,
+		resourceLoader,
+	});
+	if (process.cwd() !== runtime.cwd) {
+		process.chdir(runtime.cwd);
+	}
+	const runtimeHost = new AgentSessionRuntimeHost(runtimeBootstrap, runtime);
+	const { session, modelFallbackMessage } = runtime;
+	time("createAgentSession");
 
 	if (!isInteractive && !session.model) {
 		console.error(chalk.red("No models available."));
@@ -846,7 +906,8 @@ export async function main(args: string[]) {
 	}
 
 	if (mode === "rpc") {
-		await runRpcMode(session);
+		printTimings();
+		await runRpcMode(runtimeHost);
 	} else if (isInteractive) {
 		if (scopedModels.length > 0 && (parsed.verbose || !settingsManager.getQuietStartup())) {
 			const modelList = scopedModels
@@ -858,7 +919,7 @@ export async function main(args: string[]) {
 			console.log(chalk.dim(`Model scope: ${modelList} ${chalk.gray("(Ctrl+P to cycle)")}`));
 		}
 
-		const interactiveMode = new InteractiveMode(session, {
+		const interactiveMode = new InteractiveMode(runtimeHost, {
 			migratedProviders,
 			modelFallbackMessage,
 			initialMessage,
@@ -868,6 +929,8 @@ export async function main(args: string[]) {
 		});
 		if (startupBenchmark) {
 			await interactiveMode.init();
+			time("interactiveMode.init");
+			printTimings();
 			interactiveMode.stop();
 			stopThemeWatcher();
 			if (process.stdout.writableLength > 0) {
@@ -882,7 +945,8 @@ export async function main(args: string[]) {
 		printTimings();
 		await interactiveMode.run();
 	} else {
-		await runPrintMode(session, {
+		printTimings();
+		const exitCode = await runPrintMode(runtimeHost, {
 			mode,
 			messages: parsed.messages,
 			initialMessage,
@@ -890,6 +954,9 @@ export async function main(args: string[]) {
 		});
 		stopThemeWatcher();
 		restoreStdout();
+		if (exitCode !== 0) {
+			process.exitCode = exitCode;
+		}
 		return;
 	}
 }

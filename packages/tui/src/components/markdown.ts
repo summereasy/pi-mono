@@ -362,7 +362,7 @@ export class Markdown implements Component {
 				// Default message style should not apply inside blockquotes.
 				const quoteInlineStyleContext: InlineStyleContext = {
 					applyText: (text: string) => text,
-					stylePrefix: "",
+					stylePrefix: quoteStylePrefix,
 				};
 				const quoteTokens = token.tokens || [];
 				const renderedQuoteLines: string[] = [];
@@ -503,6 +503,10 @@ export class Markdown implements Component {
 						result += applyTextWithNewlines(token.text);
 					}
 			}
+		}
+
+		while (stylePrefix && result.endsWith(stylePrefix)) {
+			result = result.slice(0, -stylePrefix.length);
 		}
 
 		return result;
