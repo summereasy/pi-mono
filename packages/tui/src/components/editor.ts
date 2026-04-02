@@ -2,7 +2,7 @@ import type { AutocompleteProvider, AutocompleteSuggestions, CombinedAutocomplet
 import { getKeybindings } from "../keybindings.js";
 import { decodeKittyPrintable, matchesKey } from "../keys.js";
 import { KillRing } from "../kill-ring.js";
-import { type Component, CURSOR_MARKER, type Focusable, type TUI } from "../tui.js";
+import { type Component, CURSOR_MARKER, type Focusable, type TerminalFocusAware, type TUI } from "../tui.js";
 import { UndoStack } from "../undo-stack.js";
 import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils.js";
 import { SelectList, type SelectListLayoutOptions, type SelectListTheme } from "./select-list.js";
@@ -214,15 +214,17 @@ const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
 
 const ATTACHMENT_AUTOCOMPLETE_DEBOUNCE_MS = 20;
 
-export class Editor implements Component, Focusable {
+export class Editor implements Component, Focusable, TerminalFocusAware {
 	private state: EditorState = {
 		lines: [""],
 		cursorLine: 0,
 		cursorCol: 0,
 	};
 
-	/** Focusable interface - set by TUI when focus changes */
+	/** Focusable interface - set by TUI when component-level focus changes */
 	focused: boolean = false;
+	/** Focusable interface - set by TUI when terminal window/pane focus changes */
+	terminalFocused: boolean = true;
 
 	protected tui: TUI;
 	private theme: EditorTheme;
@@ -458,6 +460,8 @@ export class Editor implements Component, Focusable {
 		// Render each visible layout line
 		// Emit hardware cursor marker only when focused and not showing autocomplete
 		const emitCursorMarker = this.focused && !this.autocompleteState;
+		// Show fake cursor (inverse video) only when terminal has OS-level focus
+		const showCursor = this.terminalFocused;
 
 		for (const layoutLine of visibleLines) {
 			let displayText = layoutLine.text;
@@ -478,12 +482,12 @@ export class Editor implements Component, Focusable {
 					const afterGraphemes = [...this.segment(after)];
 					const firstGrapheme = afterGraphemes[0]?.segment || "";
 					const restAfter = after.slice(firstGrapheme.length);
-					const cursor = `\x1b[7m${firstGrapheme}\x1b[0m`;
+					const cursor = showCursor ? `\x1b[7m${firstGrapheme}\x1b[0m` : firstGrapheme;
 					displayText = before + marker + cursor + restAfter;
 					// lineVisibleWidth stays the same - we're replacing, not adding
 				} else {
 					// Cursor is at the end - add highlighted space
-					const cursor = "\x1b[7m \x1b[0m";
+					const cursor = showCursor ? "\x1b[7m \x1b[0m" : " ";
 					displayText = before + marker + cursor;
 					lineVisibleWidth = lineVisibleWidth + 1;
 					// If cursor overflows content width into the padding, flag it

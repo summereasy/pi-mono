@@ -41,6 +41,9 @@ export interface Terminal {
 	hideCursor(): void; // Hide the cursor
 	showCursor(): void; // Show the cursor
 
+	// Focus events
+	setFocusHandler(handler: ((focused: boolean) => void) | undefined): void;
+
 	// Clear operations
 	clearLine(): void; // Clear current line
 	clearFromCursor(): void; // Clear from cursor to end of screen
@@ -59,6 +62,7 @@ export class ProcessTerminal implements Terminal {
 	private resizeHandler?: () => void;
 	private _kittyProtocolActive = false;
 	private _modifyOtherKeysActive = false;
+	private _focusHandler?: (focused: boolean) => void;
 	private stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
 	private writeLogPath = (() => {
@@ -95,6 +99,9 @@ export class ProcessTerminal implements Terminal {
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
 		process.stdout.write("\x1b[?2004h");
 
+		// Enable focus reporting - terminal sends \x1b[I on focus in, \x1b[O on focus out
+		process.stdout.write("\x1b[?1004h");
+
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
 
@@ -130,8 +137,24 @@ export class ProcessTerminal implements Terminal {
 		// Kitty protocol response pattern: \x1b[?<flags>u
 		const kittyResponsePattern = /^\x1b\[\?(\d+)u$/;
 
+		// Focus event patterns: \x1b[I = focus in, \x1b[O = focus out
+		const focusInPattern = /^\x1b\[I$/;
+		const focusOutPattern = /^\x1b\[O$/;
+
 		// Forward individual sequences to the input handler
 		this.stdinBuffer.on("data", (sequence) => {
+			// Check for focus events
+			if (this._focusHandler) {
+				if (focusInPattern.test(sequence)) {
+					this._focusHandler(true);
+					return;
+				}
+				if (focusOutPattern.test(sequence)) {
+					this._focusHandler(false);
+					return;
+				}
+			}
+
 			// Check for Kitty protocol response (only if not already enabled)
 			if (!this._kittyProtocolActive) {
 				const match = sequence.match(kittyResponsePattern);
@@ -264,6 +287,9 @@ export class ProcessTerminal implements Terminal {
 		// Disable bracketed paste mode
 		process.stdout.write("\x1b[?2004l");
 
+		// Disable focus reporting
+		process.stdout.write("\x1b[?1004l");
+
 		// Disable Kitty keyboard protocol if not already done by drainInput()
 		if (this._kittyProtocolActive) {
 			process.stdout.write("\x1b[<u");
@@ -356,5 +382,9 @@ export class ProcessTerminal implements Terminal {
 	setTitle(title: string): void {
 		// OSC 0;title BEL - set terminal window title
 		process.stdout.write(`\x1b]0;${title}\x07`);
+	}
+
+	setFocusHandler(handler: ((focused: boolean) => void) | undefined): void {
+		this._focusHandler = handler;
 	}
 }

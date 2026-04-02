@@ -1,7 +1,7 @@
 import { getKeybindings } from "../keybindings.js";
 import { decodeKittyPrintable } from "../keys.js";
 import { KillRing } from "../kill-ring.js";
-import { type Component, CURSOR_MARKER, type Focusable } from "../tui.js";
+import { type Component, CURSOR_MARKER, type Focusable, type TerminalFocusAware } from "../tui.js";
 import { UndoStack } from "../undo-stack.js";
 import { getSegmenter, isPunctuationChar, isWhitespaceChar, sliceByColumn, visibleWidth } from "../utils.js";
 
@@ -15,14 +15,16 @@ interface InputState {
 /**
  * Input component - single-line text input with horizontal scrolling
  */
-export class Input implements Component, Focusable {
+export class Input implements Component, Focusable, TerminalFocusAware {
 	private value: string = "";
 	private cursor: number = 0; // Cursor position in the value
 	public onSubmit?: (value: string) => void;
 	public onEscape?: () => void;
 
-	/** Focusable interface - set by TUI when focus changes */
+	/** Focusable interface - set by TUI when component-level focus changes */
 	focused: boolean = false;
+	/** Focusable interface - set by TUI when terminal window/pane focus changes */
+	terminalFocused: boolean = true;
 
 	// Bracketed paste mode buffering
 	private pasteBuffer: string = "";
@@ -489,8 +491,9 @@ export class Input implements Component, Focusable {
 		// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
 		const marker = this.focused ? CURSOR_MARKER : "";
 
-		// Use inverse video to show cursor
-		const cursorChar = `\x1b[7m${atCursor}\x1b[27m`; // ESC[7m = reverse video, ESC[27m = normal
+		// Show fake cursor (inverse video) only when terminal has focus
+		const showCursor = this.terminalFocused;
+		const cursorChar = showCursor ? `\x1b[7m${atCursor}\x1b[27m` : atCursor;
 		const textWithCursor = beforeCursor + marker + cursorChar + afterCursor;
 
 		// Calculate visual width

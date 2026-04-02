@@ -49,13 +49,23 @@ type InputListener = (data: string) => InputListenerResult;
  * cursor there for proper IME candidate window positioning.
  */
 export interface Focusable {
-	/** Set by TUI when focus changes. Component should emit CURSOR_MARKER when true. */
+	/** Set by TUI when component-level focus changes (e.g. tab between components). */
 	focused: boolean;
+}
+
+/** Components that also react to terminal window/pane focus changes. */
+export interface TerminalFocusAware {
+	terminalFocused: boolean;
 }
 
 /** Type guard to check if a component implements Focusable */
 export function isFocusable(component: Component | null): component is Component & Focusable {
 	return component !== null && "focused" in component;
+}
+
+/** Type guard to check if a component tracks terminal window/pane focus. */
+export function isTerminalFocusAware(component: Component | null): component is Component & TerminalFocusAware {
+	return component !== null && "terminalFocused" in component;
 }
 
 /**
@@ -290,6 +300,9 @@ export class TUI extends Container {
 		if (isFocusable(component)) {
 			component.focused = true;
 		}
+		if (isTerminalFocusAware(component)) {
+			component.terminalFocused = this._hasFocus;
+		}
 	}
 
 	/**
@@ -408,12 +421,15 @@ export class TUI extends Container {
 		for (const overlay of this.overlayStack) overlay.component.invalidate?.();
 	}
 
+	private _hasFocus = true;
+
 	start(): void {
 		this.stopped = false;
 		this.terminal.start(
 			(data) => this.handleInput(data),
 			() => this.requestRender(),
 		);
+		this.terminal.setFocusHandler((focused) => this.handleFocus(focused));
 		this.terminal.hideCursor();
 		this.queryCellSize();
 		this.requestRender();
@@ -474,6 +490,21 @@ export class TUI extends Container {
 			this.renderRequested = false;
 			this.doRender();
 		});
+	}
+
+	private handleFocus(focused: boolean): void {
+		if (this._hasFocus === focused) return;
+		this._hasFocus = focused;
+
+		if (isTerminalFocusAware(this.focusedComponent)) {
+			this.focusedComponent.terminalFocused = focused;
+		}
+
+		this.requestRender();
+
+		if (!focused) {
+			this.terminal.hideCursor();
+		}
 	}
 
 	private handleInput(data: string): void {
@@ -1192,7 +1223,7 @@ export class TUI extends Container {
 		}
 
 		this.hardwareCursorRow = targetRow;
-		if (this.showHardwareCursor) {
+		if (this.showHardwareCursor && this._hasFocus) {
 			this.terminal.showCursor();
 		} else {
 			this.terminal.hideCursor();

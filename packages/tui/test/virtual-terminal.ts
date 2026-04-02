@@ -12,6 +12,7 @@ export class VirtualTerminal implements Terminal {
 	private xterm: XtermTerminalType;
 	private inputHandler?: (data: string) => void;
 	private resizeHandler?: () => void;
+	private focusHandler?: (focused: boolean) => void;
 	private _columns: number;
 	private _rows: number;
 
@@ -100,6 +101,10 @@ export class VirtualTerminal implements Terminal {
 		this.xterm.write(`\x1b]0;${title}\x07`);
 	}
 
+	setFocusHandler(handler: ((focused: boolean) => void) | undefined): void {
+		this.focusHandler = handler;
+	}
+
 	// Test-specific methods not in Terminal interface
 
 	/**
@@ -109,6 +114,13 @@ export class VirtualTerminal implements Terminal {
 		if (this.inputHandler) {
 			this.inputHandler(data);
 		}
+	}
+
+	/**
+	 * Simulate terminal focus changes.
+	 */
+	sendFocus(focused: boolean): void {
+		this.focusHandler?.(focused);
 	}
 
 	/**
