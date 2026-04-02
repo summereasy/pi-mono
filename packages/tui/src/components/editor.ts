@@ -4,7 +4,15 @@ import { decodeKittyPrintable, matchesKey } from "../keys.js";
 import { KillRing } from "../kill-ring.js";
 import { type Component, CURSOR_MARKER, type Focusable, type TerminalFocusAware, type TUI } from "../tui.js";
 import { UndoStack } from "../undo-stack.js";
-import { getSegmenter, isPunctuationChar, isWhitespaceChar, truncateToWidth, visibleWidth } from "../utils.js";
+import {
+	backwardWordLength,
+	forwardWordLength,
+	getSegmenter,
+	isPunctuationChar,
+	isWhitespaceChar,
+	truncateToWidth,
+	visibleWidth,
+} from "../utils.js";
 import { SelectList, type SelectListLayoutOptions, type SelectListTheme } from "./select-list.js";
 
 const baseSegmenter = getSegmenter();
@@ -1741,14 +1749,15 @@ export class Editor implements Component, Focusable, TerminalFocusAware {
 					newCol -= graphemes.pop()?.segment.length || 0;
 				}
 			} else {
-				// Skip word run
-				while (
-					graphemes.length > 0 &&
-					!isWhitespaceChar(graphemes[graphemes.length - 1]?.segment || "") &&
-					!isPunctuationChar(graphemes[graphemes.length - 1]?.segment || "") &&
-					!isPasteMarker(graphemes[graphemes.length - 1]?.segment || "")
-				) {
-					newCol -= graphemes.pop()?.segment.length || 0;
+				// Skip the trailing word-granularity segment so CJK text moves by ICU
+				// dictionary words instead of falling back to grapheme-by-grapheme motion.
+				const remainingText = graphemes.map((g) => g.segment).join("");
+				const skipChars = backwardWordLength(remainingText);
+				let remaining = skipChars;
+				while (remaining > 0 && graphemes.length > 0) {
+					const g = graphemes.pop()!;
+					newCol -= g.segment.length;
+					remaining -= g.segment.length;
 				}
 			}
 		}
@@ -1964,16 +1973,10 @@ export class Editor implements Component, Focusable, TerminalFocusAware {
 					next = iterator.next();
 				}
 			} else {
-				// Skip word run
-				while (
-					!next.done &&
-					!isWhitespaceChar(next.value.segment) &&
-					!isPunctuationChar(next.value.segment) &&
-					!isPasteMarker(next.value.segment)
-				) {
-					newCol += next.value.segment.length;
-					next = iterator.next();
-				}
+				// Skip the leading word-granularity segment so CJK text moves by ICU
+				// dictionary words without landing inside the next segment.
+				const remainingText = currentLine.slice(newCol);
+				newCol += forwardWordLength(remainingText);
 			}
 		}
 

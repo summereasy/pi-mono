@@ -10,6 +10,73 @@ export function getSegmenter(): Intl.Segmenter {
 	return segmenter;
 }
 
+// Word-level segmenter for CJK-aware word boundary detection.
+// Uses ICU dictionary-based segmentation to correctly identify word
+// boundaries in CJK text where words are not separated by spaces.
+const wordSegmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+
+/**
+ * Calculate how many characters to skip backward from the end of text
+ * to cross the trailing word-granularity span.
+ *
+ * Callers are expected to strip whitespace and punctuation runs first.
+ * CJK text uses ICU dictionary segmentation. Consecutive non-word symbols
+ * such as emoji are kept together so legacy word-delete behavior remains
+ * stable for symbol runs.
+ */
+export function backwardWordLength(text: string): number {
+	if (text.length === 0) return 0;
+	const segments = [...wordSegmenter.segment(text)];
+	const last = segments[segments.length - 1];
+	if (!last) return 0;
+
+	let length = last.segment.length;
+	if (last.isWordLike) {
+		return length;
+	}
+
+	for (let i = segments.length - 2; i >= 0; i--) {
+		const seg = segments[i]!;
+		if (seg.isWordLike || isWhitespaceChar(seg.segment) || isPunctuationChar(seg.segment)) {
+			break;
+		}
+		length += seg.segment.length;
+	}
+
+	return length;
+}
+
+/**
+ * Calculate how many characters to skip forward from the start of text
+ * to cross the leading word-granularity span.
+ *
+ * Callers are expected to strip whitespace and punctuation runs first.
+ * CJK text uses ICU dictionary segmentation. Consecutive non-word symbols
+ * such as emoji are kept together so movement never lands inside the next
+ * word while preserving symbol-run behavior.
+ */
+export function forwardWordLength(text: string): number {
+	if (text.length === 0) return 0;
+	const segments = [...wordSegmenter.segment(text)];
+	const first = segments[0];
+	if (!first) return 0;
+
+	let length = first.segment.length;
+	if (first.isWordLike) {
+		return length;
+	}
+
+	for (let i = 1; i < segments.length; i++) {
+		const seg = segments[i]!;
+		if (seg.isWordLike || isWhitespaceChar(seg.segment) || isPunctuationChar(seg.segment)) {
+			break;
+		}
+		length += seg.segment.length;
+	}
+
+	return length;
+}
+
 /**
  * Check if a grapheme cluster (after segmentation) could possibly be an RGI emoji.
  * This is a fast heuristic to avoid the expensive rgiEmojiRegex test.
