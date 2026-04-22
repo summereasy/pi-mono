@@ -51,6 +51,9 @@ export interface Terminal {
 
 	// Title operations
 	setTitle(title: string): void; // Set terminal window title
+
+	// Progress indicator (OSC 9;4)
+	setProgress(active: boolean): void;
 }
 
 /**
@@ -386,5 +389,15 @@ export class ProcessTerminal implements Terminal {
 
 	setFocusHandler(handler: ((focused: boolean) => void) | undefined): void {
 		this._focusHandler = handler;
+	}
+
+	setProgress(active: boolean): void {
+		if (active) {
+			// OSC 9;4;3 - indeterminate progress
+			process.stdout.write("\x1b]9;4;3\x07");
+		} else {
+			// OSC 9;4;0 - clear progress
+			process.stdout.write("\x1b]9;4;0;\x07");
+		}
 	}
 }

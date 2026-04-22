@@ -105,6 +105,8 @@ export class VirtualTerminal implements Terminal {
 		this.focusHandler = handler;
 	}
 
+	setProgress(_active: boolean): void {}
+
 	// Test-specific methods not in Terminal interface
 
 	/**
