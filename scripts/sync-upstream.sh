@@ -32,15 +32,7 @@ build_committed_sources() {
 		npm run build
 	)
 	(
-		cd packages/mom
-		npm run build
-	)
-	(
 		cd packages/web-ui
-		npm run build
-	)
-	(
-		cd packages/pods
 		npm run build
 	)
 }
