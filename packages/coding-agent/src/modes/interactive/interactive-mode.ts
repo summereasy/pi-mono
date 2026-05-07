@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -15,7 +15,8 @@ import {
 	type Message,
 	type Model,
 	type OAuthProviderId,
-} from "@mariozechner/pi-ai";
+	type OAuthSelectPrompt,
+} from "@earendil-works/pi-ai";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -26,7 +27,7 @@ import type {
 	OverlayHandle,
 	OverlayOptions,
 	SlashCommand,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import {
 	CombinedAutocompleteProvider,
 	type Component,
@@ -43,7 +44,7 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
@@ -84,6 +85,7 @@ import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/cha
 import { copyToClipboard } from "../../utils/clipboard.js";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.js";
 import { parseGitUrl } from "../../utils/git.js";
+import { getCwdRelativePath } from "../../utils/paths.js";
 import { getPiUserAgent } from "../../utils/pi-user-agent.js";
 import { killTrackedDetachedChildren } from "../../utils/shell.js";
 import { ensureTool } from "../../utils/tools-manager.js";
@@ -910,15 +912,9 @@ export class InteractiveMode {
 	private formatContextPath(p: string): string {
 		const cwd = path.resolve(this.sessionManager.getCwd());
 		const absolutePath = path.isAbsolute(p) ? path.resolve(p) : path.resolve(cwd, p);
-		const relativePath = path.relative(cwd, absolutePath);
-		const isInsideCwd =
-			relativePath === "" ||
-			(!relativePath.startsWith("..") &&
-				!relativePath.startsWith(`..${path.sep}`) &&
-				!path.isAbsolute(relativePath));
-
-		if (isInsideCwd) {
-			return relativePath || ".";
+		const relativePath = getCwdRelativePath(absolutePath, cwd);
+		if (relativePath !== undefined) {
+			return relativePath;
 		}
 
 		return this.formatDisplayPath(absolutePath);
@@ -2632,6 +2628,7 @@ export class InteractiveMode {
 
 		switch (event.type) {
 			case "agent_start":
+				this.pendingTools.clear();
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3099,6 +3096,7 @@ export class InteractiveMode {
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
 		this.pendingTools.clear();
+		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 
 		if (options.updateFooter) {
 			this.footer.invalidate();
@@ -3140,16 +3138,16 @@ export class InteractiveMode {
 							}
 							component.updateResult({ content: [{ type: "text", text: errorMessage }], isError: true });
 						} else {
-							this.pendingTools.set(content.id, component);
+							renderedPendingTools.set(content.id, component);
 						}
 					}
 				}
 			} else if (message.role === "toolResult") {
 				// Match tool results to pending tool components
-				const component = this.pendingTools.get(message.toolCallId);
+				const component = renderedPendingTools.get(message.toolCallId);
 				if (component) {
 					component.updateResult(message);
-					this.pendingTools.delete(message.toolCallId);
+					renderedPendingTools.delete(message.toolCallId);
 				}
 			} else {
 				// All other messages use standard rendering
@@ -3157,7 +3155,9 @@ export class InteractiveMode {
 			}
 		}
 
-		this.pendingTools.clear();
+		for (const [toolCallId, component] of renderedPendingTools) {
+			this.pendingTools.set(toolCallId, component);
+		}
 		this.ui.requestRender();
 	}
 
@@ -3517,7 +3517,7 @@ export class InteractiveMode {
 		const updateInstruction = theme.fg("muted", `New version ${newVersion} is available. Run `) + action;
 		const changelogUrl = theme.fg(
 			"accent",
-			"https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md",
+			"https://github.com/earendil-works/pi-mono/blob/main/packages/coding-agent/CHANGELOG.md",
 		);
 		const changelogLine = theme.fg("muted", "Changelog: ") + changelogUrl;
 
@@ -4645,6 +4645,34 @@ export class InteractiveMode {
 		}
 	}
 
+	private showOAuthLoginSelect(dialog: LoginDialogComponent, prompt: OAuthSelectPrompt): Promise<string | undefined> {
+		return new Promise((resolve) => {
+			const restoreDialog = () => {
+				this.editorContainer.clear();
+				this.editorContainer.addChild(dialog);
+				this.ui.setFocus(dialog);
+				this.ui.requestRender();
+			};
+			const labels = prompt.options.map((option) => option.label);
+			const selector = new ExtensionSelectorComponent(
+				prompt.message,
+				labels,
+				(optionLabel) => {
+					restoreDialog();
+					resolve(prompt.options.find((option) => option.label === optionLabel)?.id);
+				},
+				() => {
+					restoreDialog();
+					resolve(undefined);
+				},
+			);
+			this.editorContainer.clear();
+			this.editorContainer.addChild(selector);
+			this.ui.setFocus(selector);
+			this.ui.requestRender();
+		});
+	}
+
 	private async showLoginDialog(providerId: string, providerName: string): Promise<void> {
 		const providerInfo = this.session.modelRegistry.authStorage
 			.getOAuthProviders()
@@ -4721,6 +4749,8 @@ export class InteractiveMode {
 				onProgress: (message: string) => {
 					dialog.showProgress(message);
 				},
+
+				onSelect: (prompt: OAuthSelectPrompt) => this.showOAuthLoginSelect(dialog, prompt),
 
 				onManualCodeInput: () => manualCodePromise,
 
