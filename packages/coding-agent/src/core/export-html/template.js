@@ -1272,7 +1272,7 @@
         }
 
         if (entry.type === 'model_change') {
-          return `<div class="model-change" id="${entryDomId}">${tsHtml}Switched to model: <span class="model-name">${escapeHtml(entry.provider)}/${escapeHtml(entry.modelId)}</span></div>`;
+          return '';
         }
 
         if (entry.type === 'compaction') {
@@ -1364,52 +1364,64 @@
         if (globalStats.compactions) msgParts.push(`${globalStats.compactions} compactions`);
         if (globalStats.branchSummaries) msgParts.push(`${globalStats.branchSummaries} branch summaries`);
 
+        const modelSummary =
+          globalStats.models.length === 0
+            ? 'unknown model'
+            : globalStats.models.length === 1
+              ? globalStats.models[0]
+              : `${globalStats.models.length} models`;
+        const messageCount = globalStats.userMessages + globalStats.assistantMessages;
+        const compactParts = [
+          modelSummary,
+          `${messageCount} message${messageCount === 1 ? '' : 's'}`,
+          `${globalStats.toolCalls} tool call${globalStats.toolCalls === 1 ? '' : 's'}`
+        ];
+
         let html = `
           <div class="header">
-            <h1>Session: ${escapeHtml(header?.id || 'unknown')}</h1>
-            <div class="help-bar">
-              <span class="help-hint">T toggle thinking · O toggle tools</span>
-              <div class="help-actions">
-                <button type="button" class="header-toggle-btn" data-action="toggle-thinking" title="Toggle thinking (T)">Toggle thinking</button>
-                <button type="button" class="header-toggle-btn" data-action="toggle-tools" title="Toggle tools (O)">Toggle tools</button>
-                <button type="button" class="download-json-btn" onclick="downloadSessionJson()" title="Download session as JSONL">↓ JSONL</button>
-              </div>
+            <div class="header-title-row">
+              <h1>Session Export</h1>
+              <button type="button" class="download-json-btn" onclick="downloadSessionJson()" title="Download session as JSONL">↓ JSONL</button>
             </div>
-            <div class="header-info">
-              <div class="info-item"><span class="info-label">Date:</span><span class="info-value">${header?.timestamp ? new Date(header.timestamp).toLocaleString() : 'unknown'}</span></div>
-              <div class="info-item"><span class="info-label">Models:</span><span class="info-value">${escapeHtml(globalStats.models.join(', ') || 'unknown')}</span></div>
-              <div class="info-item"><span class="info-label">Messages:</span><span class="info-value">${msgParts.join(', ') || '0'}</span></div>
-              <div class="info-item"><span class="info-label">Tool Calls:</span><span class="info-value">${globalStats.toolCalls}</span></div>
-              <div class="info-item"><span class="info-label">Tokens:</span><span class="info-value">${tokenParts.join(' ') || '0'}</span></div>
-              <div class="info-item"><span class="info-label">Cost:</span><span class="info-value">$${totalCost.toFixed(3)}</span></div>
+            <div class="header-summary">${escapeHtml(compactParts.join(' · '))}</div>
+            <div class="header-details expandable" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
+              <div class="header-details-summary">Session details <span class="metadata-collapsed">· click to expand</span><span class="metadata-expanded">· click to hide</span></div>
+              <div class="header-details-content" onclick="event.stopPropagation()">
+                <div class="help-bar">
+                  <span class="help-hint">T toggle thinking · O toggle tools</span>
+                  <div class="help-actions">
+                    <button type="button" class="header-toggle-btn" data-action="toggle-thinking" title="Toggle thinking (T)">Toggle thinking</button>
+                    <button type="button" class="header-toggle-btn" data-action="toggle-tools" title="Toggle tools (O)">Toggle tools</button>
+                  </div>
+                </div>
+                <div class="header-info">
+                  <div class="info-item"><span class="info-label">Session:</span><span class="info-value">${escapeHtml(header?.id || 'unknown')}</span></div>
+                  <div class="info-item"><span class="info-label">Date:</span><span class="info-value">${header?.timestamp ? new Date(header.timestamp).toLocaleString() : 'unknown'}</span></div>
+                  <div class="info-item"><span class="info-label">Models:</span><span class="info-value">${escapeHtml(globalStats.models.join(', ') || 'unknown')}</span></div>
+                  <div class="info-item"><span class="info-label">Messages:</span><span class="info-value">${msgParts.join(', ') || '0'}</span></div>
+                  <div class="info-item"><span class="info-label">Tool Calls:</span><span class="info-value">${globalStats.toolCalls}</span></div>
+                  <div class="info-item"><span class="info-label">Tokens:</span><span class="info-value">${tokenParts.join(' ') || '0'}</span></div>
+                  <div class="info-item"><span class="info-label">Cost:</span><span class="info-value">$${totalCost.toFixed(3)}</span></div>
+                </div>
+              </div>
             </div>
           </div>`;
 
         // Render system prompt (user's base prompt, applies to all providers)
         if (systemPrompt) {
           const lines = systemPrompt.split('\n');
-          const previewLines = 10;
-          if (lines.length > previewLines) {
-            const preview = lines.slice(0, previewLines).join('\n');
-            const remaining = lines.length - previewLines;
-            html += `<div class="system-prompt expandable" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
-              <div class="system-prompt-header">System Prompt</div>
-              <div class="system-prompt-preview">${escapeHtml(preview)}</div>
-              <div class="system-prompt-expand-hint">... (${remaining} more lines, click to expand)</div>
+          const lineLabel = `${lines.length} line${lines.length === 1 ? '' : 's'}`;
+          html += `<div class="system-prompt expandable" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
+              <div class="system-prompt-header">System Prompt <span class="metadata-collapsed">${lineLabel} · click to expand</span><span class="metadata-expanded">${lineLabel} · click to hide</span></div>
               <div class="system-prompt-full">${escapeHtml(systemPrompt)}</div>
             </div>`;
-          } else {
-            html += `<div class="system-prompt">
-              <div class="system-prompt-header">System Prompt</div>
-              <div class="system-prompt-full" style="display: block">${escapeHtml(systemPrompt)}</div>
-            </div>`;
-          }
         }
 
         if (tools && tools.length > 0) {
-          html += `<div class="tools-list">
-            <div class="tools-header">Available Tools</div>
-            <div class="tools-content">
+          const toolLabel = `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
+          html += `<div class="tools-list expandable" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
+            <div class="tools-header">Available Tools <span class="metadata-collapsed">${toolLabel} · click to expand</span><span class="metadata-expanded">${toolLabel} · click to hide</span></div>
+            <div class="tools-content" onclick="event.stopPropagation()">
               ${tools.map(t => {
                 const hasParams = t.parameters && typeof t.parameters === 'object' && t.parameters.properties && Object.keys(t.parameters.properties).length > 0;
                 if (!hasParams) {
@@ -1429,7 +1441,7 @@
                   }
                   paramsHtml += `</div>`;
                 }
-                return `<div class="tool-item" onclick="if(window.getSelection().toString())return;this.classList.toggle('params-expanded')"><span class="tool-item-name">${escapeHtml(t.name)}</span> - <span class="tool-item-desc">${escapeHtml(t.description)}</span> <span class="tool-params-hint"></span><div class="tool-params-content">${paramsHtml}</div></div>`;
+                return `<div class="tool-item" onclick="event.stopPropagation();if(window.getSelection().toString())return;this.classList.toggle('params-expanded')"><span class="tool-item-name">${escapeHtml(t.name)}</span> - <span class="tool-item-desc">${escapeHtml(t.description)}</span> <span class="tool-params-hint"></span><div class="tool-params-content">${paramsHtml}</div></div>`;
               }).join('')}
             </div>
           </div>`;

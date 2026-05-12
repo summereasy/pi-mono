@@ -263,7 +263,7 @@
     .help-bar {
       font-size: 11px;
       color: var(--warning);
-      margin-bottom: var(--line-height);
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -304,15 +304,49 @@
     .header {
       background: var(--container-bg);
       border-radius: 4px;
-      padding: var(--line-height);
+      padding: 10px 12px;
       margin-bottom: var(--line-height);
+    }
+
+    .header-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 2px;
     }
 
     .header h1 {
       font-size: 12px;
       font-weight: bold;
       color: var(--borderAccent);
-      margin-bottom: var(--line-height);
+      margin-bottom: 0;
+    }
+
+    .header-summary,
+    .header-details-summary,
+    .metadata-collapsed,
+    .metadata-expanded {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .metadata-expanded {
+      display: none;
+    }
+
+    .header-details {
+      margin-top: 6px;
+      cursor: pointer;
+    }
+
+    .header-details-content {
+      display: none;
+      margin-top: 8px;
+    }
+
+    .header-details.expanded .header-details-content {
+      display: block;
     }
 
     .header-info {
@@ -337,6 +371,7 @@
     .info-value {
       color: var(--text);
       flex: 1;
+      word-break: break-word;
     }
 
     /* Messages */
@@ -649,18 +684,16 @@
       color: var(--customMessageLabel);
     }
 
-    .system-prompt-preview {
-      color: var(--customMessageText);
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      font-size: 11px;
-      margin-top: var(--line-height);
+    .header-details.expanded .metadata-collapsed,
+    .system-prompt.expanded .metadata-collapsed,
+    .tools-list.expanded .metadata-collapsed {
+      display: none;
     }
 
-    .system-prompt-expand-hint {
-      color: var(--muted);
-      font-style: italic;
-      margin-top: 4px;
+    .header-details.expanded .metadata-expanded,
+    .system-prompt.expanded .metadata-expanded,
+    .tools-list.expanded .metadata-expanded {
+      display: inline;
     }
 
     .system-prompt-full {
@@ -670,11 +703,6 @@
       word-wrap: break-word;
       font-size: 11px;
       margin-top: var(--line-height);
-    }
-
-    .system-prompt.expanded .system-prompt-preview,
-    .system-prompt.expanded .system-prompt-expand-hint {
-      display: none;
     }
 
     .system-prompt.expanded .system-prompt-full {
@@ -698,12 +726,21 @@
       padding: var(--line-height);
       border-radius: 4px;
       margin-bottom: var(--line-height);
+      cursor: pointer;
     }
 
     .tools-header {
       font-weight: bold;
       color: var(--customMessageLabel);
-      margin-bottom: var(--line-height);
+    }
+
+    .tools-content {
+      display: none;
+      margin-top: var(--line-height);
+    }
+
+    .tools-list.expanded .tools-content {
+      display: block;
     }
 
     .tool-item {

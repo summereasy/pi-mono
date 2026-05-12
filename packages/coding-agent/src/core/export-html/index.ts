@@ -1,6 +1,7 @@
 import type { AgentState } from "@earendil-works/pi-agent-core";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { basename, join } from "path";
+import { homedir } from "os";
+import { basename, extname, join } from "path";
 import { APP_NAME, getExportTemplateDir } from "../../config.js";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.js";
 import type { ToolDefinition } from "../extensions/types.js";
@@ -36,6 +37,22 @@ export interface ExportOptions {
 	themeName?: string;
 	/** Optional tool renderer for custom tools */
 	toolRenderer?: ToolHtmlRenderer;
+}
+
+function expandExportPath(filePath: string): string {
+	const withHome = filePath.replace(/^~(?=$|[\\/])/, homedir());
+	return withHome.replace(/\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})/g, (match, bare, braced) => {
+		const name = bare || braced;
+		return process.env[name] ?? match;
+	});
+}
+
+export function normalizeHtmlExportPath(outputPath: string): string {
+	const expanded = expandExportPath(outputPath);
+	if (extname(expanded)) {
+		return expanded;
+	}
+	return `${expanded}.html`;
 }
 
 /** Parse a color string to RGB values. Supports hex (#RRGGBB) and rgb(r,g,b) formats. */
@@ -274,6 +291,8 @@ export async function exportSessionToHtml(
 	if (!outputPath) {
 		const sessionBasename = basename(sessionFile, ".jsonl");
 		outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
+	} else {
+		outputPath = normalizeHtmlExportPath(outputPath);
 	}
 
 	writeFileSync(outputPath, html, "utf8");
@@ -307,6 +326,8 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 	if (!outputPath) {
 		const inputBasename = basename(inputPath, ".jsonl");
 		outputPath = `${APP_NAME}-session-${inputBasename}.html`;
+	} else {
+		outputPath = normalizeHtmlExportPath(outputPath);
 	}
 
 	writeFileSync(outputPath, html, "utf8");
