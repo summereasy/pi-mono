@@ -31,10 +31,6 @@ build_committed_sources() {
 		cd packages/coding-agent
 		npm run build
 	)
-	(
-		cd packages/web-ui
-		npm run build
-	)
 }
 
 require_clean_worktree
@@ -46,7 +42,7 @@ echo "🔀 Merging upstream/main..."
 git merge upstream/main --no-edit
 
 echo "📦 Syncing dependencies from package-lock.json..."
-npm ci
+npm ci --ignore-scripts
 
 build_committed_sources
 
