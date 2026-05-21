@@ -1,10 +1,10 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Editor } from "../src/components/editor.js";
-import { Input } from "../src/components/input.js";
-import { TUI } from "../src/tui.js";
-import { defaultEditorTheme } from "./test-themes.js";
-import { VirtualTerminal } from "./virtual-terminal.js";
+import { Editor } from "../src/components/editor.ts";
+import { Input } from "../src/components/input.ts";
+import { TUI } from "../src/tui.ts";
+import { defaultEditorTheme } from "./test-themes.ts";
+import { VirtualTerminal } from "./virtual-terminal.ts";
 
 describe("TUI terminal focus cursor handling", () => {
 	it("syncs terminal focus state when setFocus is called while the terminal is unfocused", () => {

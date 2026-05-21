@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { describe, expect, it } from "vitest";
-import { normalizeHtmlExportPath } from "../src/core/export-html/index.js";
+import { normalizeHtmlExportPath } from "../src/core/export-html/index.ts";
 
 describe("HTML export path normalization", () => {
 	it("appends .html when the output path has no extension", () => {

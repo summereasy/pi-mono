@@ -1,11 +1,11 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { Editor } from "../src/components/editor.js";
-import { Input } from "../src/components/input.js";
-import { TUI } from "../src/tui.js";
-import { backwardWordLength, forwardWordLength } from "../src/utils.js";
-import { defaultEditorTheme } from "./test-themes.js";
-import { VirtualTerminal } from "./virtual-terminal.js";
+import { Editor } from "../src/components/editor.ts";
+import { Input } from "../src/components/input.ts";
+import { TUI } from "../src/tui.ts";
+import { backwardWordLength, forwardWordLength } from "../src/utils.ts";
+import { defaultEditorTheme } from "./test-themes.ts";
+import { VirtualTerminal } from "./virtual-terminal.ts";
 
 function getInputCursor(input: Input): number {
 	return (input as unknown as { cursor: number }).cursor;
