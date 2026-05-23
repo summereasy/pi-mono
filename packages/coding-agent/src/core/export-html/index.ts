@@ -4,6 +4,7 @@ import { homedir } from "os";
 import { basename, extname, join } from "path";
 import { APP_NAME, getExportTemplateDir } from "../../config.ts";
 import { getResolvedThemeColors, getThemeExportColors } from "../../modes/interactive/theme/theme.ts";
+import { normalizePath, resolvePath } from "../../utils/paths.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import type { SessionEntry } from "../session-manager.ts";
 import { SessionManager } from "../session-manager.ts";
@@ -287,7 +288,7 @@ export async function exportSessionToHtml(
 
 	const html = generateHtml(sessionData, opts.themeName);
 
-	let outputPath = opts.outputPath;
+	let outputPath = opts.outputPath ? normalizePath(opts.outputPath) : undefined;
 	if (!outputPath) {
 		const sessionBasename = basename(sessionFile, ".jsonl");
 		outputPath = `${APP_NAME}-session-${sessionBasename}.html`;
@@ -305,12 +306,13 @@ export async function exportSessionToHtml(
  */
 export async function exportFromFile(inputPath: string, options?: ExportOptions | string): Promise<string> {
 	const opts: ExportOptions = typeof options === "string" ? { outputPath: options } : options || {};
+	const resolvedInputPath = resolvePath(inputPath);
 
-	if (!existsSync(inputPath)) {
-		throw new Error(`File not found: ${inputPath}`);
+	if (!existsSync(resolvedInputPath)) {
+		throw new Error(`File not found: ${resolvedInputPath}`);
 	}
 
-	const sm = SessionManager.open(inputPath);
+	const sm = SessionManager.open(resolvedInputPath);
 
 	const sessionData: SessionData = {
 		header: sm.getHeader(),
@@ -322,9 +324,9 @@ export async function exportFromFile(inputPath: string, options?: ExportOptions 
 
 	const html = generateHtml(sessionData, opts.themeName);
 
-	let outputPath = opts.outputPath;
+	let outputPath = opts.outputPath ? normalizePath(opts.outputPath) : undefined;
 	if (!outputPath) {
-		const inputBasename = basename(inputPath, ".jsonl");
+		const inputBasename = basename(resolvedInputPath, ".jsonl");
 		outputPath = `${APP_NAME}-session-${inputBasename}.html`;
 	} else {
 		outputPath = normalizeHtmlExportPath(outputPath);
