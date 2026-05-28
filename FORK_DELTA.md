@@ -2,15 +2,13 @@
 
 本文件记录 fork (`summereasy/pi-mono`) 相对于上游 (`badlogic/pi-mono`) 的独有改动，方便追踪和后续合入上游。
 
-最后更新: 2026-04-23
+最后更新: 2026-05-28
 
 ---
 
 ## main 分支
 
-### CJK 文字导航与终端焦点光标隐藏
-
-两个功能，均在 `packages/tui/` 下，涉及编辑器和输入组件的词移动逻辑。
+### 终端焦点光标隐藏
 
 #### `ec44959e` — feat(tui): hide cursor when terminal loses focus
 
@@ -25,15 +23,9 @@
   - `packages/tui/test/virtual-terminal.ts` (+12) — 测试辅助
   - `packages/tui/test/edit-tool-no-full-redraw.test.ts` (+1) — 适配
 
-#### `15c1e4d9` — feat(tui): improve CJK word navigation
+#### 已合入上游，fork 侧已移除
 
-- **日期**: 2026-04-03
-- **变更**: 编辑器和输入框中的词级移动（Ctrl+Left/Right 等）正确处理 CJK 字符，不再把整个中文段落当成一个"词"
-- **文件**:
-  - `packages/tui/src/utils.ts` (+67) — CJK 分词工具函数
-  - `packages/tui/src/components/editor.ts` (+41/-15) — 编辑器词移动逻辑
-  - `packages/tui/src/components/input.ts` (+35/-8) — 输入框词移动逻辑
-  - `packages/tui/test/word-navigation-cjk.test.ts` (+116) — 测试
+- **`15c1e4d9` — CJK 词导航**: upstream #5068 已提供 `word-navigation.ts` 与相关测试，fork 不再维护独立实现
 
 ---
 
@@ -73,8 +65,8 @@
 #### `d1c79171` — feat(tui): CJK word segmentation and terminal focus cursor hiding
 
 - **日期**: 2026-04-03
-- **变更**: 上述两个功能（CJK 分词 + 焦点光标隐藏）的初始版本，以 squash 形式提交
-- **状态**: 已拆分为 `ec44959e` 和 `15c1e4d9` 合入 main，此分支可清理
+- **变更**: CJK 分词与焦点光标隐藏的初始 squash 提交
+- **状态**: CJK 分词已由 upstream #5068 覆盖；焦点光标隐藏保留在 `ec44959e`。此分支可清理
 
 ---
 
@@ -83,3 +75,4 @@
 | 日期 | 操作 |
 |---|---|
 | 2026-04-23 | upstream 与 main 同步，无落后提交 |
+| 2026-05-28 | 合并 upstream v0.76.0；移除 fork 侧 CJK 词导航，改用 upstream `word-navigation.ts` |
