@@ -2,7 +2,7 @@
 
 本文件记录 fork (`summereasy/pi-mono`) 相对于上游 (`badlogic/pi-mono`) 的独有改动，方便追踪和后续合入上游。
 
-最后更新: 2026-05-28
+最后更新: 2026-06-09
 
 ---
 
@@ -15,15 +15,16 @@
 - **日期**: 2026-04-03
 - **变更**: 终端失去焦点时自动隐藏光标，获得焦点时恢复显示
 - **文件**:
-  - `packages/tui/src/terminal.ts` (+30) — 新增焦点事件监听
-  - `packages/tui/src/tui.ts` (+35/-2) — TUI 层对接焦点状态
-  - `packages/tui/src/components/editor.ts` (+14/-3) — 编辑器光标显隐
-  - `packages/tui/src/components/input.ts` (+13/-4) — 输入框光标显隐
+  - `packages/tui/src/terminal.ts` (+30) — 新增焦点事件监听（`\x1b[?1004h/l`、`setFocusHandler`、焦点序列检测）
+  - `packages/tui/src/tui.ts` (+35/-2) — TUI 层对接焦点状态（`TerminalFocusAware` 接口、`_hasFocus`、`handleFocus`）
+  - `packages/tui/src/components/editor.ts` (+14/-3) — 编辑器光标显隐（实现 `TerminalFocusAware`）
+  - `packages/tui/src/components/input.ts` (+13/-4) — 输入框光标显隐（实现 `TerminalFocusAware`）
   - `packages/tui/test/focus-cursor.test.ts` (+40) — 测试
   - `packages/tui/test/virtual-terminal.ts` (+12) — 测试辅助
   - `packages/tui/test/edit-tool-no-full-redraw.test.ts` (+1) — 适配
+- **状态**: fork 独有，upstream v0.79.0 尚未包含。每次 sync upstream 需注意 `terminal.ts` 的 `setupStdinBuffer()` 和 `stop()` 中的焦点代码与 upstream 的 Kitty 协议协商重构的合并冲突（类型 3）
 
-#### 已合入上游，fork 侧已移除
+### 已合入上游，fork 侧已移除
 
 - **`15c1e4d9` — CJK 词导航**: upstream #5068 已提供 `word-navigation.ts` 与相关测试，fork 不再维护独立实现
 
@@ -76,3 +77,4 @@
 |---|---|
 | 2026-04-23 | upstream 与 main 同步，无落后提交 |
 | 2026-05-28 | 合并 upstream v0.76.0；移除 fork 侧 CJK 词导航，改用 upstream `word-navigation.ts` |
+| 2026-06-09 | 合并 upstream v0.79.0；解决 `terminal.ts` 合并冲突（fork 焦点功能 + upstream Kitty 协议重构），保留 fork 焦点代码 |
