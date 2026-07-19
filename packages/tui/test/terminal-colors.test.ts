@@ -54,6 +54,8 @@ class TestTerminal implements Terminal {
 
 	showCursor(): void {}
 
+	setFocusHandler(_handler: ((focused: boolean) => void) | undefined): void {}
+
 	clearLine(): void {}
 
 	clearFromCursor(): void {}

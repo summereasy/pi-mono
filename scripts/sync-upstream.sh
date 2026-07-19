@@ -21,7 +21,13 @@ build_committed_sources() {
 	)
 	(
 		cd packages/ai
+		node scripts/generate-models.ts --json-only --json-output ../../.artifacts/model-catalog
+		rm -rf src/providers/data
+		mkdir -p src/providers/data
+		cp ../../.artifacts/model-catalog/providers/*.json src/providers/data/
 		npx tsgo -p tsconfig.build.json
+		npx shx rm -rf dist/providers/data
+		npx shx cp -r src/providers/data dist/providers/data
 	)
 	(
 		cd packages/agent
