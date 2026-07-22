@@ -13,21 +13,30 @@ require_clean_worktree() {
 	fi
 }
 
+enable_node_env_proxy() {
+	if [[ "${NODE_OPTIONS:-}" == *"--use-env-proxy"* ]]; then
+		return
+	fi
+	if [[ -z "${HTTP_PROXY:-}${HTTPS_PROXY:-}${ALL_PROXY:-}${http_proxy:-}${https_proxy:-}${all_proxy:-}" ]]; then
+		return
+	fi
+	if node --help | grep -q -- "--use-env-proxy"; then
+		export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--use-env-proxy"
+	fi
+}
+
 build_committed_sources() {
 	echo "🔨 Building committed sources..."
+	enable_node_env_proxy
 	(
 		cd packages/tui
 		npm run build
 	)
 	(
 		cd packages/ai
-		node scripts/generate-models.ts --json-only --json-output ../../.artifacts/model-catalog
-		rm -rf src/providers/data
-		mkdir -p src/providers/data
-		cp ../../.artifacts/model-catalog/providers/*.json src/providers/data/
-		npx tsgo -p tsconfig.build.json
-		npx shx rm -rf dist/providers/data
-		npx shx cp -r src/providers/data dist/providers/data
+		npm run hydrate-model-data
+		npm run generate-model-catalog
+		npm run build:offline
 	)
 	(
 		cd packages/agent
