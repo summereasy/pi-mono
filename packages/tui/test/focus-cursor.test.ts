@@ -2,14 +2,14 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { Editor } from "../src/components/editor.ts";
 import { Input } from "../src/components/input.ts";
-import { TUI } from "../src/tui.ts";
+import { TuiMainScreen } from "../src/tui-main-screen.ts";
 import { defaultEditorTheme } from "./test-themes.ts";
 import { VirtualTerminal } from "./virtual-terminal.ts";
 
 describe("TUI terminal focus cursor handling", () => {
 	it("syncs terminal focus state when setFocus is called while the terminal is unfocused", () => {
 		const terminal = new VirtualTerminal(40, 10);
-		const tui = new TUI(terminal);
+		const tui = new TuiMainScreen(terminal);
 		const input = new Input();
 		const editor = new Editor(tui, defaultEditorTheme);
 
