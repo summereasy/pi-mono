@@ -29,23 +29,11 @@ build_committed_sources() {
 	echo "🔨 Building committed sources..."
 	enable_node_env_proxy
 	(
-		cd packages/tui
-		npm run build
-	)
-	(
 		cd packages/ai
 		npm run hydrate-model-data
 		npm run generate-model-catalog
-		npm run build:offline
 	)
-	(
-		cd packages/agent
-		npm run build
-	)
-	(
-		cd packages/coding-agent
-		npm run build
-	)
+	npm run build:offline
 }
 
 require_clean_worktree

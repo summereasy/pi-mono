@@ -1,9 +1,16 @@
 import { getKeybindings } from "../keybindings.ts";
 import { decodeKittyPrintable } from "../keys.ts";
 import { KillRing } from "../kill-ring.ts";
-import { type Component, CURSOR_MARKER, type Focusable, type TerminalFocusAware } from "../tui.ts";
+import {
+	type Component,
+	CURSOR_MARKER,
+	type Focusable,
+	type TerminalFocusAware,
+	type TuiMouseEvent,
+	type TuiMouseEventResult,
+} from "../tui.ts";
 import { UndoStack } from "../undo-stack.ts";
-import { getGraphemeSegmenter, isWhitespaceChar, sliceByColumn, visibleWidth } from "../utils.ts";
+import { getGraphemeSegmenter, isWhitespaceChar, sliceByColumn, truncateToWidth, visibleWidth } from "../utils.ts";
 import { findWordBackward, findWordForward } from "../word-navigation.ts";
 
 const segmenter = getGraphemeSegmenter();
@@ -13,12 +20,22 @@ interface InputState {
 	cursor: number;
 }
 
+export interface InputOptions {
+	prompt?: string;
+	placeholder?: string;
+	placeholderStyle?: (text: string) => string;
+}
+
 /**
  * Input component - single-line text input with horizontal scrolling
  */
 export class Input implements Component, Focusable, TerminalFocusAware {
 	private value: string = "";
 	private cursor: number = 0; // Cursor position in the value
+	private readonly prompt: string;
+	private readonly placeholder: string;
+	private readonly placeholderStyle: (text: string) => string;
+	private renderedStartColumn = 0;
 	public onSubmit?: (value: string) => void;
 	public onEscape?: () => void;
 
@@ -37,6 +54,12 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 
 	// Undo support
 	private undoStack = new UndoStack<InputState>();
+
+	constructor(options: InputOptions = {}) {
+		this.prompt = options.prompt ?? "> ";
+		this.placeholder = options.placeholder ?? "";
+		this.placeholderStyle = options.placeholderStyle ?? ((text) => text);
+	}
 
 	getValue(): string {
 		return this.value;
@@ -212,6 +235,24 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 		}
 	}
 
+	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		if (event.type !== "press" || event.button !== "left" || event.y !== 0) return undefined;
+		const visibleColumn = Math.max(0, event.x - 2);
+		const targetColumn = this.renderedStartColumn + visibleColumn;
+		let currentColumn = 0;
+		this.cursor = this.value.length;
+		for (const grapheme of segmenter.segment(this.value)) {
+			const nextColumn = currentColumn + visibleWidth(grapheme.segment);
+			if (targetColumn < nextColumn) {
+				this.cursor = grapheme.index;
+				break;
+			}
+			currentColumn = nextColumn;
+		}
+		this.lastAction = null;
+		return { handled: true, focus: true };
+	}
+
 	private insertCharacter(char: string): void {
 		// Undo coalescing: consecutive word chars coalesce into one undo unit
 		if (isWhitespaceChar(char) || this.lastAction !== "type-word") {
@@ -379,15 +420,28 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 
 	render(width: number): string[] {
 		// Calculate visible window
-		const prompt = "> ";
-		const availableWidth = width - prompt.length;
+		const availableWidth = width - visibleWidth(this.prompt);
 
 		if (availableWidth <= 0) {
-			return [prompt];
+			return [truncateToWidth(this.prompt, width, "")];
+		}
+
+		if (this.value.length === 0 && this.placeholder) {
+			const placeholder = truncateToWidth(this.placeholder, availableWidth, "");
+			const graphemes = [...segmenter.segment(placeholder)];
+			const atCursor = graphemes[0]?.segment ?? " ";
+			const afterCursor = placeholder.slice(atCursor.length);
+			const marker = this.focused ? CURSOR_MARKER : "";
+			const styledAtCursor = this.placeholderStyle(atCursor);
+			const cursorChar = this.terminalFocused ? `\x1b[7m${styledAtCursor}\x1b[27m` : styledAtCursor;
+			const textWithCursor = marker + cursorChar + this.placeholderStyle(afterCursor);
+			const padding = " ".repeat(Math.max(0, availableWidth - visibleWidth(textWithCursor)));
+			return [this.prompt + textWithCursor + padding];
 		}
 
 		let visibleText = "";
 		let cursorDisplay = this.cursor;
+		this.renderedStartColumn = 0;
 		const totalWidth = visibleWidth(this.value);
 
 		if (totalWidth < availableWidth) {
@@ -414,6 +468,7 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 					startCol = Math.max(0, cursorCol - halfWidth);
 				}
 
+				this.renderedStartColumn = startCol;
 				visibleText = sliceByColumn(this.value, startCol, scrollWidth, true);
 				const beforeCursor = sliceByColumn(this.value, startCol, Math.max(0, cursorCol - startCol), true);
 				cursorDisplay = beforeCursor.length;
@@ -443,7 +498,7 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 		// Calculate visual width
 		const visualLength = visibleWidth(textWithCursor);
 		const padding = " ".repeat(Math.max(0, availableWidth - visualLength));
-		const line = prompt + textWithCursor + padding;
+		const line = this.prompt + textWithCursor + padding;
 
 		return [line];
 	}

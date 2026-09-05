@@ -14,7 +14,8 @@ description: >-
 
 - **先分析, 后改代码** — 不得看到 `<<<<<<<` 就直接 patch 并宣布完成。
 - **类型 2 禁止先改代码** — 若冲突涉及 fork 自研功能与 upstream 新功能的语义交叉, 只输出分析报告和可选方案, **等用户决定**后再动代码。
-- **不自动 commit** — 除非用户明确要求。
+- **完成本地 merge lifecycle** — 用户调用本 skill 解决 merge 冲突, 即授权在语义取舍明确后完成 resolve、依赖/生成步骤恢复、build、检查、相关测试和本地 merge commit。不得停在仅 staged 且 `MERGE_HEAD` 仍存在的状态。
+- **不自动 push** — push、force-push 和 history rewrite 仍需用户明确授权。
 - **不动 upstream 维护的文件来存规则** — 例如 pi-mono 的 `AGENTS.md` 由 upstream 团队维护, 不要往里加 fork 专用段落。
 
 ## 触发场景
@@ -88,12 +89,15 @@ fork 自研功能与 upstream 新功能在同一区域有交叉, 或无法同时
 2. 采用 upstream 的结构, 把 fork 独有逻辑**重挂**到 upstream 新结构中的正确位置
 3. 说明保留了什么 (fork) 和什么 (upstream)
 
-### 4. 实施与验证 (类型 1 和 3, 或用户已决定的类型 2)
+### 4. 实施、验证并完成本地 merge (类型 1 和 3, 或用户已决定的类型 2)
 
 - 清除所有 conflict markers
-- 运行项目常规检查 (pi-mono: `npm run check`; 其他仓库按现有惯例)
+- 若 merge 中断了同步脚本, 从中断点恢复 lockfile 对应的依赖、生成数据和 build 步骤; 不要因为冲突已清除就跳过后半段 workflow
+- 运行项目常规 build 和检查 (pi-mono: 恢复 `scripts/sync-upstream.sh` 的 `npm ci --ignore-scripts` 与 `build_committed_sources` 等价步骤, 再运行 `npm run check`; 其他仓库按现有惯例)
 - 跑与冲突区域相关的测试
 - `git status` 确认无遗漏的 unmerged paths
+- 显式 stage 本次解决和必要适配的路径, 创建本地 merge commit
+- 确认 `MERGE_HEAD` 已消失、upstream commit 已成为 `HEAD` 的 ancestor、worktree clean
 - 汇报: 每个文件的分类, 做了什么, 测了什么 — **不要只说「搞定了」**
 
 ## pi-mono fork 备忘
@@ -102,8 +106,9 @@ fork 自研功能与 upstream 新功能在同一区域有交叉, 或无法同时
 |----|------|
 | 同步脚本 | `./scripts/sync-upstream.sh` |
 | fork 独有追踪 | `FORK_DELTA.md` |
+| 冲突后恢复 | `npm ci --ignore-scripts`, 然后完成同步脚本中被跳过的 build/生成步骤 |
 | 检查 | `npm run check` |
-| tui 测试 | `cd packages/tui && npm test` |
+| tui 测试 | 按仓库规范运行相关的具体 Node test 文件 |
 | lockfile commit | pre-commit 可能需要 `PI_ALLOW_LOCKFILE_CHANGE=1` |
 
 ## 报告模板
@@ -128,7 +133,7 @@ fork 自研功能与 upstream 新功能在同一区域有交叉, 或无法同时
 - 选项 B: ...
 
 ### 下一步
-- [ ] 等你确认 / [ ] 我可以直接 resolve 类型 3
+- [ ] 类型 2 等你确认; 确认后由 agent 连续完成本地 merge commit
 ```
 
 ## 调用方式
