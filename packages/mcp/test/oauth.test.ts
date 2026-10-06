@@ -16,6 +16,7 @@ import {
 	OAuthInsecureEndpointError,
 	OAuthIssuerMismatchError,
 	type OAuthTokens,
+	registerClient,
 } from "../src/oauth/index.ts";
 import { closeServers, listen, readBody } from "./helpers.ts";
 
@@ -126,7 +127,8 @@ describe("MCP OAuth", () => {
 			if (url.pathname === "/register") {
 				const metadata = JSON.parse(await readBody(request)) as Record<string, unknown>;
 				response.writeHead(201, { "content-type": "application/json" });
-				response.end(JSON.stringify({ ...metadata, client_id: "test-client" }));
+				// Empty and null optional fields count as absent (#10266).
+				response.end(JSON.stringify({ ...metadata, client_id: "test-client", client_secret: "" }));
 				return;
 			}
 			if (url.pathname === "/authorize") {
@@ -142,7 +144,14 @@ describe("MCP OAuth", () => {
 				if (params.get("grant_type") === "refresh_token") {
 					refreshes++;
 					response.setHeader("content-type", "application/json");
-					response.end(JSON.stringify({ access_token: "refreshed-token", token_type: "Bearer" }));
+					response.end(
+						JSON.stringify({
+							access_token: "refreshed-token",
+							token_type: "Bearer",
+							refresh_token: "",
+							expires_in: null,
+						}),
+					);
 					return;
 				}
 				const challenge = createHash("sha256")
@@ -155,7 +164,12 @@ describe("MCP OAuth", () => {
 				}
 				response.setHeader("content-type", "application/json");
 				response.end(
-					JSON.stringify({ access_token: "first-token", refresh_token: "refresh-token", token_type: "Bearer" }),
+					JSON.stringify({
+						access_token: "first-token",
+						refresh_token: "refresh-token",
+						token_type: "Bearer",
+						scope: "",
+					}),
 				);
 				return;
 			}
@@ -178,7 +192,8 @@ describe("MCP OAuth", () => {
 			if (token !== "Bearer first-token" && token !== "Bearer refreshed-token") {
 				await readBody(request);
 				response.writeHead(401, {
-					"www-authenticate": `Bearer resource_metadata="${serverOrigin}/.well-known/oauth-protected-resource/mcp", scope="org:read"`,
+					// An empty scope falls through to the resource metadata's scopes_supported.
+					"www-authenticate": `Bearer resource_metadata="${serverOrigin}/.well-known/oauth-protected-resource/mcp", scope=""`,
 				});
 				response.end("Unauthorized");
 				return;
@@ -251,7 +266,13 @@ describe("MCP OAuth", () => {
 				openGetStream: false,
 			}),
 		);
-		expect(provider.tokenSet?.access_token).toBe("refreshed-token");
+		// Neither token response names a scope, so the grant has the requested scope.
+		expect(provider.tokenSet).toEqual({
+			access_token: "refreshed-token",
+			refresh_token: "refresh-token",
+			token_type: "Bearer",
+			scope: "org:read",
+		});
 		expect(refreshes).toBe(1);
 		await refreshedClient.close();
 		await callback.close();
@@ -261,6 +282,12 @@ describe("MCP OAuth", () => {
 		const grants: string[] = [];
 		const origin = await listen(async (request, response, serverOrigin) => {
 			const url = new URL(request.url ?? "/", serverOrigin);
+			if (url.pathname === "/.well-known/oauth-protected-resource/mcp") {
+				// Invalid resource metadata falls back to the server origin instead of failing discovery.
+				response.setHeader("content-type", "application/json");
+				response.end(JSON.stringify({ resource: `${serverOrigin}/mcp`, authorization_servers: ["not a url"] }));
+				return;
+			}
 			if (url.pathname === "/.well-known/oauth-authorization-server") {
 				response.setHeader("content-type", "application/json");
 				response.end(
@@ -323,7 +350,7 @@ describe("MCP OAuth", () => {
 	it("asks for authorization instead of refreshing when the server needs more scope", async () => {
 		const provider = new TestOAuthProvider("http://127.0.0.1/callback");
 		provider.client = { client_id: "client" };
-		provider.tokenSet = { access_token: "a1", refresh_token: "r1", token_type: "Bearer" };
+		provider.tokenSet = { access_token: "a1", refresh_token: "r1", token_type: "Bearer", scope: "repo read:org" };
 		const origin = await listen(async (request, response, serverOrigin) => {
 			const url = new URL(request.url ?? "/", serverOrigin);
 			if (url.pathname === "/.well-known/oauth-authorization-server") {
@@ -353,7 +380,8 @@ describe("MCP OAuth", () => {
 				token: "a1",
 			}),
 		).rejects.toBeInstanceOf(McpOAuthAuthorizationRequiredError);
-		expect(provider.authorizationUrl?.searchParams.get("scope")).toBe("repo admin");
+		// The challenge may list only the missing scopes; the new grant keeps the old ones too.
+		expect(provider.authorizationUrl?.searchParams.get("scope")).toBe("repo read:org admin");
 		// The working grant is kept until the user authorizes the new scope.
 		expect(provider.tokenSet?.access_token).toBe("a1");
 	});
@@ -378,6 +406,27 @@ describe("MCP OAuth", () => {
 			onRedirect: () => {},
 		});
 		expect(await second.tokens()).toBeUndefined();
+	});
+
+	// #10493
+	it("registers with an application_type derived from the redirect URIs unless one is set", async () => {
+		const bodies: Record<string, unknown>[] = [];
+		const origin = await listen(async (request, response) => {
+			const metadata = JSON.parse(await readBody(request)) as Record<string, unknown>;
+			bodies.push(metadata);
+			response.writeHead(201, { "content-type": "application/json" });
+			response.end(JSON.stringify({ ...metadata, client_id: "client" }));
+		});
+		const register = (redirect_uris: string[], application_type?: string) =>
+			registerClient(origin, {
+				clientMetadata: { redirect_uris, ...(application_type ? { application_type } : {}) },
+			});
+		await register(["http://127.0.0.1:1234/callback"]);
+		await register(["http://[::1]/callback"]);
+		await register(["com.example.app:/callback"]);
+		await register(["https://app.example/callback"]);
+		await register(["http://localhost/callback"], "web");
+		expect(bodies.map((body) => body.application_type)).toEqual(["native", "native", "native", "web", "web"]);
 	});
 
 	it("rejects authorization metadata whose issuer does not match discovery", async () => {
@@ -481,6 +530,26 @@ describe("OAuthCallbackServer pages", () => {
 			const response = await fetch(`${callback.redirectUrl}?code=abc&state=s1`);
 			expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
 			expect(await response.text()).toBe("Authorization complete. You may close this window.");
+			expect((await pending).code).toBe("abc");
+		} finally {
+			await callback.close();
+		}
+	});
+
+	// #10302
+	it("rejects a response on another path than the expected one", async () => {
+		const callback = await OAuthCallbackServer.listen({ extraPaths: ["/callback/server-id"] });
+		try {
+			const origin = new URL(callback.redirectUrl).origin;
+			const mixedUp = callback.waitForCallback("s1", "/callback/server-id");
+			mixedUp.catch(() => undefined);
+			const wrong = await fetch(`${origin}/callback?code=abc&state=s1`);
+			expect(wrong.status).toBe(400);
+			await expect(mixedUp).rejects.toThrow("arrived on another redirect URI");
+
+			const pending = callback.waitForCallback("s2", "/callback/server-id");
+			const right = await fetch(`${origin}/callback/server-id?code=abc&state=s2`);
+			expect(right.status).toBe(200);
 			expect((await pending).code).toBe("abc");
 		} finally {
 			await callback.close();
