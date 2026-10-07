@@ -5,6 +5,7 @@ import {
 	type Component,
 	CURSOR_MARKER,
 	type Focusable,
+	renderFakeCursor,
 	type TerminalFocusAware,
 	type TuiMouseEvent,
 	type TuiMouseEventResult,
@@ -433,7 +434,7 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 			const afterCursor = placeholder.slice(atCursor.length);
 			const marker = this.focused ? CURSOR_MARKER : "";
 			const styledAtCursor = this.placeholderStyle(atCursor);
-			const cursorChar = this.terminalFocused ? `\x1b[7m${styledAtCursor}\x1b[27m` : styledAtCursor;
+			const cursorChar = this.terminalFocused ? renderFakeCursor(styledAtCursor) : styledAtCursor;
 			const textWithCursor = marker + cursorChar + this.placeholderStyle(afterCursor);
 			const padding = " ".repeat(Math.max(0, availableWidth - visibleWidth(textWithCursor)));
 			return [this.prompt + textWithCursor + padding];
@@ -490,9 +491,8 @@ export class Input implements Component, Focusable, TerminalFocusAware {
 		// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
 		const marker = this.focused ? CURSOR_MARKER : "";
 
-		// Show fake cursor (inverse video) only when terminal has focus
-		const showCursor = this.terminalFocused;
-		const cursorChar = showCursor ? `\x1b[7m${atCursor}\x1b[27m` : atCursor;
+		// 终端失焦时不绘制软件光标; 有焦点时由 TUI 决定绘制方式。
+		const cursorChar = this.terminalFocused ? renderFakeCursor(atCursor) : atCursor;
 		const textWithCursor = beforeCursor + marker + cursorChar + afterCursor;
 
 		// Calculate visual width

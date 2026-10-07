@@ -6,6 +6,7 @@ import {
 	type Component,
 	CURSOR_MARKER,
 	type Focusable,
+	renderFakeCursor,
 	type TerminalFocusAware,
 	type TUI,
 	type TuiMouseEvent,
@@ -592,12 +593,12 @@ export class Editor implements Component, Focusable, TerminalFocusAware {
 					const afterGraphemes = [...this.segment(after, "grapheme")];
 					const firstGrapheme = afterGraphemes[0]?.segment || "";
 					const restAfter = after.slice(firstGrapheme.length);
-					const cursor = showCursor ? `\x1b[7m${firstGrapheme}\x1b[0m` : firstGrapheme;
+					const cursor = showCursor ? renderFakeCursor(firstGrapheme) : firstGrapheme;
 					displayText = before + marker + cursor + restAfter;
 					// lineVisibleWidth stays the same - we're replacing, not adding
 				} else {
 					// Cursor is at the end - add highlighted space
-					const cursor = showCursor ? "\x1b[7m \x1b[0m" : " ";
+					const cursor = showCursor ? renderFakeCursor(" ") : " ";
 					displayText = before + marker + cursor;
 					lineVisibleWidth = lineVisibleWidth + 1;
 					// If cursor overflows content width into the padding, flag it
