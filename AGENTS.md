@@ -30,7 +30,8 @@
 ## Commands
 
 - After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests.
-- Never run `npm run build` or `npm test` unless requested by the user.
+- 按任务需要运行构建。完成同步或合并时, 恢复依赖和生成步骤, 运行完整构建后再创建本地 merge commit。用户确认冲突解决方案即授权这些步骤, 不再单独询问是否构建。
+- 除非用户明确要求, 不运行 `npm test`。任务验证使用下述指定测试或非 e2e 测试命令。
 - Never run the full vitest suite directly: it includes e2e tests that activate when endpoint/auth env vars are present. For all non-e2e tests, run `./test.sh` from the repo root. Otherwise run specific tests from the package root:
   - Vitest: `node "$(git rev-parse --show-toplevel)/node_modules/vitest/dist/cli.js" --run test/specific.test.ts`
   - `packages/tui` (`node:test`): `node --test test/specific.test.ts`
@@ -38,7 +39,7 @@
 - For `packages/coding-agent/test/suite/`, use `test/suite/harness.ts` + the faux provider. No real provider APIs, keys, or paid tokens.
 - When regressions tests for fixing a github issue, add a comment with the github issue number next to the test.
 - For ad-hoc scripts, `write` them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
-- Never commit unless the user asks.
+- 除非用户要求, 不创建提交; 完成已授权的同步或合并除外。用户确认冲突解决方案后, 连续完成修复、构建、检查、相关测试和本地 merge commit, 不再重复请求批准。仅在出现新的功能语义取舍或超出授权范围时再询问。Push 需要单独授权。
 
 ## Dependency and Install Security
 
@@ -55,9 +56,9 @@ Multiple pi sessions may be running in this cwd at the same time, each modifying
 
 Committing:
 
-- Only commit files YOU changed in THIS session.
+- 仅提交本轮自己修改的文件。对于已授权的合并, 还应包含 Git 已暂存的目标分支改动和已批准的冲突解决; 提交前检查 index, 排除其他会话的无关改动。
 - Stage explicit paths (`git add <path1> <path2>`); never `git add -A` / `git add .`.
-- Before committing, run `git status` and verify you are only staging your files.
+- 提交前运行 `git status`, 确认暂存区仅包含上述授权范围内的文件。
 - `packages/ai/src/models.generated.ts` may always be included alongside your files.
 - Message format: `{feat,fix,docs}[(ai,tui,agent,coding-agent)]: <commit message> (optionally multiple lines)`. Message is informative and concise.
 
