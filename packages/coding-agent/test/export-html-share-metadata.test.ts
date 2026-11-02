@@ -18,14 +18,14 @@ describe("export HTML share metadata rendering", () => {
 	it("collapses system prompt without rendering a multi-line preview", () => {
 		expect(templateJs).not.toMatch(/previewLines\s*=\s*10/);
 		expect(templateJs).not.toMatch(/system-prompt-preview/);
-		expect(templateJs).toMatch(/System Prompt <span class="metadata-collapsed">/);
+		expect(templateJs).toMatch(/system-prompt-header">\$\{escapeHtml\(title\)\} <span class="metadata-collapsed">/);
 		expect(templateJs).toMatch(/<span class="metadata-expanded">\$\{lineLabel\} · click to hide<\/span>/);
 		expect(templateCss).toMatch(/\.system-prompt-full\s*\{[\s\S]*?display:\s*none;/);
 	});
 
 	it("collapses available tools as one section before showing individual tools", () => {
 		expect(templateJs).toMatch(/class="tools-list expandable"/);
-		expect(templateJs).toMatch(/Available Tools <span class="metadata-collapsed">/);
+		expect(templateJs).toMatch(/tools-header">\$\{escapeHtml\(title\)\} <span class="metadata-collapsed">/);
 		expect(templateJs).toMatch(/<span class="metadata-expanded">\$\{toolLabel\} · click to hide<\/span>/);
 		expect(templateJs).toMatch(/class="tools-content" onclick="event\.stopPropagation\(\)"/);
 		expect(templateCss).toMatch(/\.tools-content\s*\{[\s\S]*?display:\s*none;/);

@@ -307,6 +307,11 @@ export class Editor implements Component, Focusable, TerminalFocusAware {
 	/** Focusable interface - set by TUI when terminal window/pane focus changes */
 	terminalFocused: boolean = true;
 
+	/** The open autocomplete menu receives fullscreen viewport keys, such as PageUp/PageDown. */
+	get capturesViewportInput(): boolean {
+		return this.autocompleteState !== null;
+	}
+
 	protected tui: TUI;
 	private theme: EditorTheme;
 	private paddingX: number = 0;
@@ -766,7 +771,12 @@ export class Editor implements Component, Focusable, TerminalFocusAware {
 				return;
 			}
 
-			if (kb.matches(data, "tui.select.up") || kb.matches(data, "tui.select.down")) {
+			if (
+				kb.matches(data, "tui.select.up") ||
+				kb.matches(data, "tui.select.down") ||
+				kb.matches(data, "tui.select.pageUp") ||
+				kb.matches(data, "tui.select.pageDown")
+			) {
 				this.autocompleteList.handleInput(data);
 				return;
 			}
