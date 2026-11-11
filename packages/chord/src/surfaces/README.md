@@ -1,7 +1,7 @@
 # surfaces
 
 The client surfaces' portable part (slice 11; design §23 "Web and TUI"; decisions "Slice 11's points", "Slice 11, P3"
-to "P9", "Looks and themes"). What a page and a terminal's sandbox run alike, and what the server serves them: exported
+to "P9", "Looks and themes", "Messages and languages in the app kit"). What a page and a terminal's sandbox run alike, and what the server serves them: exported
 from `@earendil-works/chord`.
 
 - **Scripts objects** (`scripts.ts`): `WebScripts` and `TuiScripts`, remote objects on the server (`hostKind("server")()`,
@@ -22,8 +22,12 @@ from `@earendil-works/chord`.
   every close; reports `connecting`, `connected`, `waiting`. The environment (clock, timers, online, wakes) is given.
 - **A client** (`client.ts`): `startClient` makes a client host (no address), loads the initial scripts with the app's
   core facets, keeps its parent link with the loop (the link's close shared by the loop and the host), and follows the
-  scripts object: a new set fetches the changed scripts (`fetchScript`) and reloads the host in place (failures reported,
-  kept old); the first frame or a reconnect's snapshot showing what the client runs reloads nothing; a set with another
+  scripts object: a new set fetches the changed scripts (`fetchScript`), has a page's `styles` (`ClientStyles`) fetch
+  the new stylesheets without applying them (`prepare`; a stop removes what it prepared), reloads the host in place
+  (failures reported, kept old), then has them settled (`settle`: a plugin whose new code was adopted gets its new
+  stylesheet applied, one that kept its old code keeps its old stylesheet); it records per plugin the script it runs (a
+  failed one's old script), so a set showing what the client runs reloads nothing, and a reconnect re-applies the newest
+  set when a plugin kept its old code (the scripts object shows an unchanged set no second time); a set with another
   `base` calls `outdated`. Before each reconnect it asks the server's base (`serverBase`): another one also calls
   `outdated` (a new link protocol comes with a new base bundle, Chord being in it), and the loop stops.
 - **Themes** (`themes.ts`, `theme-choice.ts`, `active-theme.ts`): `Theme` (`{ id, name, mode, colors, web?, tui? }`; the
@@ -32,6 +36,15 @@ from `@earendil-works/chord`.
   host, `FALLBACK_THEMES`, `activeTheme(themes, pick, mode)`, `themeVariables` (`--<role>`, `--<web extra>`),
   `terminalColor` (a role's `tui` override, else its colour, else the fallback's; true colour or the nearest of 256);
   `ThemeChoice` (remote on the server, per principal: `pick` `{ dark, light }` and `choose`) with `themeChoiceFacet`
-  keeping every pick in one persisted document by principal key; `followActiveTheme(host, mode, changed, ctx)`.
+  keeping every pick in one persisted document by principal key (`preference.ts`, shared with the locale choice);
+  `followActiveTheme(host, mode, changed, ctx)`.
+- **Messages and languages** (`messages.ts`, `language.ts`, `format.ts`, `translations.ts`, `locale-choice.ts`,
+  `active-language.ts`; design §23): `defineMessages(namespace, catalogs)` (a typed `t`; `t.message`, `t.render`,
+  `t.in(language)`, `t.translations`), `MessagesOf`, `MessageData`, `MessageSchema`; `Language`
+  (`createLanguage(locale, translations, report)`; internally the render scope `inLanguage`, `matchLocale`,
+  `resolveLocale`); `formatTime`, `formatNumber`; the `Translations` registry (a list of `{ namespace, locale, messages, override? }` per
+  contributor; one catalog per namespace and locale) with `translationsFacet`; `LocaleChoice` with
+  `localeChoiceFacet`; `followActiveLanguage(host, preferred, changed, report, ctx)`, keeping the host's language as
+  its page state (`hostLanguage`).
 
 Tests: `test/surfaces/`.
