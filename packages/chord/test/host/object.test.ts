@@ -51,6 +51,7 @@ import {
 	failLive,
 	failures,
 	fakeTimers,
+	flagLabel,
 	flushed,
 	holdNextCommit,
 	instancesOf,
@@ -67,6 +68,7 @@ import {
 	Server,
 	Session,
 	StoreRestartable,
+	settledHeap,
 	statesOf,
 	storeRestartable,
 	type TestPrincipal,
@@ -2637,7 +2639,7 @@ describe("a version refused while its object lives (review round 3, Astra 1, 3 a
 			version: 1,
 			params: {},
 			hostAddress: () => Server(),
-			flags: { x: "x" },
+			flags: { x: flagLabel("x") },
 		});
 		const V2 = evolve(V1, (e) => e.addState("v", str()));
 		const host = createHost({ address: Server(), principal: { kind: "server" }, onError: () => {} });
@@ -2904,7 +2906,7 @@ describe("a holder refused a member (review round 2, Sol)", () => {
 			version: 1,
 			params: {},
 			hostAddress: Server,
-			flags: { write: "Write" },
+			flags: { write: flagLabel("write") },
 		});
 		const V2 = evolve(V1, (edit) => edit.addState("extra", str()));
 		const host = createHost({ address: Server(), principal: { kind: "server" }, onError: () => {} });
@@ -3228,7 +3230,7 @@ describe("refusals are static per provider and version (final review, Astra and 
 			params: { id: str() },
 			hostAddress: () => Server(),
 			events: { e: str() },
-			flags: { select: "Select" },
+			flags: { select: flagLabel("select") },
 		});
 		const V2 = evolve(V1, (e) => e.event("e", obj({ x: str() })));
 		const V3 = evolve(V2, (e) => e.addState("title", str()));
@@ -3506,4 +3508,26 @@ describe("a failed successor and the versions it refuses (final check, Astra)", 
 			await server.close(context);
 		});
 	}
+});
+
+describe("what an object keeps (hold memory)", () => {
+	it("a live object that declares nothing, with its reference: under 4.5 KiB", async () => {
+		const Plain = local("heap.plain", { version: 1, params: { id: str() }, members: { v: str() } });
+		const { host } = await loaded((h) => h.serve(Plain, ({ id }) => ({ v: constant(id) })));
+		const hold = async (from: number, to: number) => {
+			const references = [];
+			for (let id = from; id < to; id++) references.push(await host.get(Plain, { id: `p${id}` }, context));
+			return references;
+		};
+		// A warm-up first: what the first objects make for good (compiled code, caches) is no object's.
+		const warm = await hold(0, 300);
+		const before = await settledHeap();
+		const held = await hold(300, 2_300);
+		const each = ((await settledHeap()) - before) / held.length;
+		// Measured 3.1 KiB; 6.5 KiB when every attempt, object and reference made its maps, sets and lists up front
+		// (ten empty maps and sets, and lists with room for 17 items for the one they got).
+		expect(each).toBeLessThan(4.5 * 1024);
+		for (const reference of [...warm, ...held]) reference.release();
+		await host.close(context);
+	}, 30_000);
 });

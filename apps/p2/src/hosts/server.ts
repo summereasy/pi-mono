@@ -210,6 +210,7 @@ export async function startServer(options: ServerOptions = {}): Promise<P2Server
 		await unlock();
 		throw error;
 	}
+	const protocolErrors = new ProtocolErrorLog();
 	// The server's own requests act as `SERVER`: a worker tells them from a person's (`WorkerBoundary`).
 	const host = createHost({
 		address: Server(),
@@ -221,6 +222,12 @@ export async function startServer(options: ServerOptions = {}): Promise<P2Server
 		// compress, and a tunnel carries them as they are.
 		compression: nodeCompression,
 		onError: (error) => {
+			// A peer's link that broke the protocol (an outdated page's hello, refused) is the peer's problem, and it
+			// retries every few seconds: logged at most once a minute, never an owner notice.
+			if (error.kind === "protocol_error") {
+				protocolErrors.log(error);
+				return;
+			}
 			if (isOwnerNotice(error)) processLogs.notice("server", hostErrorText(error));
 			console.error("p2 server:", error);
 		},
@@ -557,10 +564,12 @@ export async function startServer(options: ServerOptions = {}): Promise<P2Server
 						...plugins.filter((name) => !listed.has(name)),
 					]),
 				].sort();
-			const unknown = wanted.filter((name) => !listed.has(name) && !plugins.includes(name));
-			const names = wanted.filter((name) => !unknown.includes(name));
-			const rebuilt = await rebuild(names);
-			// After the build, which discovered the roots anew.
+			const loaded = plugins;
+			const rebuilt = await rebuild(wanted);
+			// Judged by Chord's discovery after the build, which discovered the roots anew when a named plugin was unknown
+			// to it: a plugin put back (or laid out as p2's own listing does not see it) is applied, not refused.
+			const discovered = new Set(chordPlugins.discovery.plugins.map(({ name }) => name));
+			const unknown = wanted.filter((name) => !discovered.has(name) && !loaded.includes(name));
 			const refusals = [
 				...unknown.map((plugin) => ({ plugin, outcome: "refused" as const, errors: ["No such plugin"] })),
 				...(await discoveryProblems()),
@@ -1033,6 +1042,28 @@ function isOwnerNotice(error: HostError): boolean {
 	const failure = hostErrorCause(error);
 	return !isChordError(failure, "released") && !isChordError(failure, "forbidden");
 }
+
+/**
+ * Logs links' protocol errors, each text at most once a minute: an outdated client retries its refused hello every few
+ * seconds, and Chord's report names no peer (its text names the peer's protocol).
+ */
+class ProtocolErrorLog {
+	/** When each text was logged last, within the last minute. */
+	readonly #logged = new Map<string, number>();
+
+	/** Logs `error` unless its text was logged within the last minute. */
+	log(error: Extract<HostError, { kind: "protocol_error" }>): void {
+		const text = hostErrorText(error);
+		const now = Date.now();
+		for (const [each, at] of this.#logged) if (now - at >= PROTOCOL_ERROR_LOG_MS) this.#logged.delete(each);
+		if (this.#logged.has(text)) return;
+		this.#logged.set(text, now);
+		console.error("p2 server:", error);
+	}
+}
+
+/** How often one protocol error is logged at most. */
+const PROTOCOL_ERROR_LOG_MS = 60_000;
 
 /** How long a signalled server may take to close before it exits anyway (below `scripts/dev.mjs`'s 10 s SIGKILL). */
 const CLOSE_DEADLINE_MS = 8000;
